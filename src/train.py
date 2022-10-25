@@ -1,135 +1,159 @@
-import pyrootutils
+from argparse import ArgumentParser
+import os
+from xmlrpc.client import boolean
+import glob
 
-root = pyrootutils.setup_root(
-    search_from=__file__,
-    indicator=[".git", "pyproject.toml"],
-    pythonpath=True,
-    dotenv=True,
-)
+import torch
+import torch.optim as optim
+import torch.nn as nn
 
-# ------------------------------------------------------------------------------------ #
-# `pyrootutils.setup_root(...)` is an optional line at the top of each entry file
-# that helps to make the environment more robust and convenient
-#
-# the main advantages are:
-# - allows you to keep all entry files in "src/" without installing project as a package
-# - makes paths and scripts always work no matter where is your current work dir
-# - automatically loads environment variables from ".env" file if exists
-#
-# how it works:
-# - the line above recursively searches for either ".git" or "pyproject.toml" in present
-#   and parent dirs, to determine the project root dir
-# - adds root dir to the PYTHONPATH (if `pythonpath=True`), so this file can be run from
-#   any place without installing project as a package
-# - sets PROJECT_ROOT environment variable which is used in "configs/paths/default.yaml"
-#   to make all paths always relative to the project root
-# - loads environment variables from ".env" file in root dir (if `dotenv=True`)
-#
-# you can remove `pyrootutils.setup_root(...)` if you:
-# 1. either install project as a package or move each entry file to the project root dir
-# 2. simply remove PROJECT_ROOT variable from paths in "configs/paths/default.yaml"
-# 3. always run entry files from the project root dir
-#
-# https://github.com/ashleve/pyrootutils
-# ------------------------------------------------------------------------------------ #
+from src.models.vs_module import VisualSearchModule
+from src.utils.logger import Logger
+from src.utils import utils
 
-from typing import List, Optional, Tuple
-
-import hydra
 import pytorch_lightning as pl
-from omegaconf import DictConfig
-from pytorch_lightning import Callback, LightningDataModule, LightningModule, Trainer
-from pytorch_lightning.loggers import LightningLoggerBase
 
-from src import utils
+def do_training(hparams, model_constructor):
+    # Instantiate model
+    model = model_constructor(**vars(hparams))
 
-log = utils.get_pylogger(__name__)
+    # Set training params
+    hparams.gpus = -1
+    hparams.accelerator = 'ddp'
+    hparams.benchmark = True
 
+    if hparams.resume:
+        hparams = set_resume_parameters(hparams)
 
-@utils.task_wrapper
-def train(cfg: DictConfig) -> Tuple[dict, dict]:
-    """Trains the model. Can additionally evaluate on a testset, using best weights obtained during
-    training.
+    # Loggers
+    wblogger = utils.get_wandb_logger(hparams)
+    hparams.logger = [wblogger]
 
-    This method is wrapped in optional @task_wrapper decorator which applies extra utilities
-    before and after the call.
+    hparams.callbacks = make_checkpoint_callbacks(hparams.exp_name)
+    trainer = pl.Trainer.from_argparse_args(hparams)
+    trainer.fit(model)
+    
 
-    Args:
-        cfg (DictConfig): Configuration composed by Hydra.
+def train(epoch, model, dataloader, optimizer, training):
+    utils.fix_randseed()
+    model.module.train_mode() if training else model.module.eval()
 
-    Returns:
-        Tuple[dict, dict]: Dict with metrics and dict with all instantiated objects.
-    """
+    for idx, batch in enumerate(dataloader):
+        batch = utils.to_cuda()
+        logits = model.forward(batch['images'], batch['ids'])
+        preds = logits.argmax(dim=1)
 
-    # set seed for random number generators in pytorch, numpy and python.random
-    if cfg.get("seed"):
-        pl.seed_everything(cfg.seed, workers=True)
+        loss = model.module.compute_loss(logits, batch['ids'])
+        
 
-    log.info(f"Instantiating datamodule <{cfg.datamodule._target_}>")
-    datamodule: LightningDataModule = hydra.utils.instantiate(cfg.datamodule)
+def get_wandb_logger(hparams):
+    exp_dir = f"checkpoints/{hparams.exp_name}/"
+    id_file = f"{exp_dir}/wandb_id"
 
-    log.info(f"Instantiating model <{cfg.model._target_}>")
-    model: LightningModule = hydra.utils.instantiate(cfg.model)
-
-    log.info("Instantiating callbacks...")
-    callbacks: List[Callback] = utils.instantiate_callbacks(cfg.get("callbacks"))
-
-    log.info("Instantiating loggers...")
-    logger: List[LightningLoggerBase] = utils.instantiate_loggers(cfg.get("logger"))
-
-    log.info(f"Instantiating trainer <{cfg.trainer._target_}>")
-    trainer: Trainer = hydra.utils.instantiate(cfg.trainer, callbacks=callbacks, logger=logger)
-
-    object_dict = {
-        "cfg": cfg,
-        "datamodule": datamodule,
-        "model": model,
-        "callbacks": callbacks,
-        "logger": logger,
-        "trainer": trainer,
-    }
-
-    if logger:
-        log.info("Logging hyperparameters!")
-        utils.log_hyperparameters(object_dict)
-
-    if cfg.get("train"):
-        log.info("Starting training!")
-        trainer.fit(model=model, datamodule=datamodule, ckpt_path=cfg.get("ckpt_path"))
-
-    train_metrics = trainer.callback_metrics
-
-    if cfg.get("test"):
-        log.info("Starting testing!")
-        ckpt_path = trainer.checkpoint_callback.best_model_path
-        if ckpt_path == "":
-            log.warning("Best ckpt not found! Using current weights for testing...")
-            ckpt_path = None
-        trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path)
-        log.info(f"Best ckpt path: {ckpt_path}")
-
-    test_metrics = trainer.callback_metrics
-
-    # merge train and test metrics
-    metric_dict = {**train_metrics, **test_metrics}
-
-    return metric_dict, object_dict
-
-
-@hydra.main(version_base="1.2", config_path=root / "configs", config_name="train.yaml")
-def main(cfg: DictConfig) -> Optional[float]:
-
-    # train the model
-    metric_dict, _ = train(cfg)
-
-    # safely retrieve metric value for hydra-based hyperparameter optimization
-    metric_value = utils.get_metric_value(
-        metric_dict=metric_dict, metric_name=cfg.get("optimized_metric")
+    if os.path.exists(id_file):
+        with open(id_file) as f:
+            hparams.wandb_id = f.read()
+    else:
+        hparams.wandb_id = None
+    
+    if hparams.wandb_id is None:
+        _ = logger.experiment
+    
+    logger = pl.loggers.WandbLogger(
+        project="visual-search",
+        save_dir="checkpoints",
+        name=hparams.exp_name,
+        id=hparams.wandb_id
     )
 
-    # return optimized metric
-    return metric_value
+    if not os.path.exists(exp_dir):
+        os.makedirs(exp_dir)
+
+        with open(id_file, 'w') as f:
+            f.write(logger.version)
+    
+    return logger
+
+def get_default_argument_parser():
+    parser = ArgumentParser(add_help=False)
+
+    parser.add_argument(
+        '--project-name',
+        type=str,
+        default='visual-search',
+    )
+
+    parser.add_argument(
+        '--exp-name',
+        type=str,
+        required=True
+    )
+
+    parser.add_argument(
+        '--max_epochs',
+        type=int,
+        default=50,
+    )
+
+    parser.add_argument(
+        '--num_nodes',
+        type=int,
+        default=1,
+        help="number of nodes for distributed training"
+    )
+
+    parser.add_argument(
+        '--resume',
+        action="store_false",
+        default=False,
+        help="resume if have a checkpoint"
+    )
+
+    return parser
+
+def make_checkpoint_callbacks(exp_name, version, base_path='checkpoints', frequency=1):
+    base_callback = pl.callbacks.ModelCheckpoint(
+        dirpath=f"{base_path}/{exp_name}/checkpoints",
+        save_last=True,
+        verbose=True
+    )
+
+    val_callback = pl.callbacks.ModelCheckpoint(
+        monitor="val/loss_best",
+        dirpath=f"{base_path}/{exp_name}/checkpoints",
+        filename="result-{epoch}-{val_loss:.2f}",
+        mode="max",
+        save_top_k=-1,
+        verbose=True,
+    )
+
+    return [base_callback, val_callback]
+
+def set_resume_parameters(hparams):
+    latest = get_latest_checkpoint(hparams.exp_name)
+    print(f"Resume checkpoint {latest}")
+    hparams.resume_from_checkpoint = latest
+
+    wandb_file = "checkpoints/{hparams.exp_name}/wandb_id"
+    if os.path.exists(wandb_file):
+        with open(wandb_file, "r") as f:
+            hparams.wandb_id = f.read()
+    
+    return hparams
+
+def get_latest_checkpoint(exp_name):
+    folder = f"./checkpoints/{exp_name}/checkpoints/"
+    latest = f"{folder}/last.ckpt"
+    
+    if os.path.exists(latest):
+        return latest
+    
+    ckpts = glob(f"{folder}/epoch=*.ckpt")
+
+    if len(ckpts) == 0:
+        return None
+        
+    latest = max(ckpts, key=os.path.getctime)
+    return latest
 
 
-if __name__ == "__main__":
-    main()

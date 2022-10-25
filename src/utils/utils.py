@@ -1,11 +1,15 @@
 import time
+import os
 import warnings
 from importlib.util import find_spec
 from pathlib import Path
 from typing import Any, Callable, Dict, List
+from argparse import ArgumentParser
 
 import hydra
 from omegaconf import DictConfig
+import torch
+from pytorch_lightning import loggers
 from pytorch_lightning import Callback
 from pytorch_lightning.loggers import LightningLoggerBase
 from pytorch_lightning.utilities import rank_zero_only
@@ -14,7 +18,28 @@ from src.utils import pylogger, rich_utils
 
 log = pylogger.get_pylogger(__name__)
 
+def fix_randseed(seed):
+    """Fixes random seed for reproducibility."""
+    import random
+    import numpy as np
 
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+
+def to_cuda(batch):
+    for key, value in batch.items():
+        if isinstance(value, torch.Tensor):
+            batch[key] = value.cuda()
+    
+    return batch
+
+
+
+#################
 def task_wrapper(task_func: Callable) -> Callable:
     """Optional decorator that wraps the task function in extra utilities.
 
