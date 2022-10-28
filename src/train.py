@@ -157,3 +157,9 @@ def get_latest_checkpoint(exp_name):
     return latest
 
 
+if __name__ == "__main__":
+    parser = get_default_argument_parser()
+    parser = pl.Trainer.add_argparse_args(parser)
+    parser = VisualSearchModule.add_model_specific_args(parser)
+    hparams = parser.parse_args()
+    do_training(hparams, VisualSearchModule)
