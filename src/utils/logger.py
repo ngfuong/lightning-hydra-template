@@ -7,15 +7,15 @@ from tensorboardX import SummaryWriter
 
 
 class Logger:
-    r"""Writes evaluation resultsw of training/testing"""
+    r"""Writes evaluation results of training/testing"""
     @classmethod
     def initialize(cls, args, training):
         logtime = datetime.datetime.now().__format__('_%m%d_%H%M%S')
         logpath = args.logpath if training else '_TEST_' + args.load.split('/')[-2].split('.')[0] + logtime
         if logpath == '':
-            logpath = 'log' + logtime
+            logpath = logtime
         
-        cls.logpath = os.path.join('logs', logpath, 'log')
+        cls.logpath = os.path.join('logs', logpath, '.log')
         if not os.path.exists(cls.logpath):
             os.makedirs(cls.logpath)
         
@@ -23,25 +23,26 @@ class Logger:
             filemode='w',
             filename=os.path.join(cls.logpath, 'log.txt'), 
             level=logging.INFO,
-            format='%(message)%s',
+            format='%(message)s',
             datefmt='%m-%d %H:%M:%S'
             )
         
-        # Console lo config
+        # Console log config
         console = logging.StreamHandler()
         console.setLevel(logging.INFO)
-        formatter = logging.Formatter('%(message)')
+        formatter = logging.Formatter('%(message)s')
         console.setFormatter(formatter)
+        logging.getLogger('').addHandler(console)
 
         # Tensorboard writer
         cls.tbd_writer = SummaryWriter(os.path.join(cls.logpath, 'tensorboard/runs'))
 
         # Log arguments
-        logging.info("\n:========== Fashion Visual Search ==========")
+        logging.info('\n:========== Fashion Visual Search ==========')
         for arg in args.__dict__:
-            logging.info('| %20: %-24s' % (arg, str(args.__dict__[arg])))
-        logging.info("\n:===========================================")
-
+            logging.info('| %20s: %-24s' % (arg, str(args.__dict__[arg])))
+        logging.info(':===========================================\n')
+    
     @classmethod
     def info(cls, msg):
         r"""Writes message to log.txt"""

@@ -7,9 +7,9 @@ import torch
 import torch.optim as optim
 import torch.nn as nn
 
-from src.models.vs_module import VisualSearchModule
-from src.utils.logger import Logger
-from src.utils import utils
+from models.vs_module import VisualSearchModule
+from utils.logger import Logger
+from utils import utils
 
 import pytorch_lightning as pl
 
@@ -18,22 +18,22 @@ def do_training(hparams, model_constructor):
     model = model_constructor(**vars(hparams))
 
     # Set training params
-    hparams.gpus = -1
-    hparams.accelerator = 'ddp'
+    # hparams.gpus = -1
+    hparams.accelerator = 'cuda'
     hparams.benchmark = True
 
     if hparams.resume:
         hparams = set_resume_parameters(hparams)
 
     # Loggers
-    wblogger = utils.get_wandb_logger(hparams)
+    wblogger = get_wandb_logger(hparams)
     hparams.logger = [wblogger]
 
     hparams.callbacks = make_checkpoint_callbacks(hparams.exp_name)
     trainer = pl.Trainer.from_argparse_args(hparams)
     trainer.fit(model)
     
-
+#TODO: write this
 def train(epoch, model, dataloader, optimizer, training):
     utils.fix_randseed()
     model.module.train_mode() if training else model.module.eval()
@@ -56,15 +56,15 @@ def get_wandb_logger(hparams):
     else:
         hparams.wandb_id = None
     
-    if hparams.wandb_id is None:
-        _ = logger.experiment
-    
     logger = pl.loggers.WandbLogger(
         project="visual-search",
         save_dir="checkpoints",
         name=hparams.exp_name,
         id=hparams.wandb_id
     )
+
+    if hparams.wandb_id is None:
+        _ = logger.experiment
 
     if not os.path.exists(exp_dir):
         os.makedirs(exp_dir)
@@ -86,13 +86,19 @@ def get_default_argument_parser():
     parser.add_argument(
         '--exp-name',
         type=str,
-        required=True
+        required=True,
+    )
+    
+    parser.add_argument(
+        '--backbone',
+        type=str,
+        default='resnet50',
     )
 
     parser.add_argument(
         '--max_epochs',
         type=int,
-        default=50,
+        default=20,
     )
 
     parser.add_argument(
@@ -101,7 +107,6 @@ def get_default_argument_parser():
         default=1,
         help="number of nodes for distributed training"
     )
-
     parser.add_argument(
         '--resume',
         action="store_false",
@@ -111,7 +116,7 @@ def get_default_argument_parser():
 
     return parser
 
-def make_checkpoint_callbacks(exp_name, version, base_path='checkpoints', frequency=1):
+def make_checkpoint_callbacks(exp_name, base_path='checkpoints', frequency=1):
     base_callback = pl.callbacks.ModelCheckpoint(
         dirpath=f"{base_path}/{exp_name}/checkpoints",
         save_last=True,
@@ -158,8 +163,7 @@ def get_latest_checkpoint(exp_name):
 
 
 if __name__ == "__main__":
-    parser = get_default_argument_parser()
-    parser = pl.Trainer.add_argparse_args(parser)
-    parser = VisualSearchModule.add_model_specific_args(parser)
+    parser = VisualSearchModule.add_model_specific_args(get_default_argument_parser())
     hparams = parser.parse_args()
+    print(hparams)
     do_training(hparams, VisualSearchModule)

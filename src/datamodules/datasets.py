@@ -2,7 +2,7 @@ import os
 import pandas as pd
 
 import torch
-from torchvision import transforms
+import torchvision.transforms as transform
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 import torch.nn.functional as F
@@ -22,27 +22,28 @@ class VSDataset:
         else:
             cls.img_mean = [0.5, 0.5, 0.5]
             cls.img_std = [0.5, 0.5, 0.5]
-        print(f'Use norm img_mean {cls.img_mean}\timg_std{cls.img_std}')
+        print(f'Use norm img_mean {cls.img_mean}\timg_std {cls.img_std}')
         
         cls.img_size = img_size 
         cls.datapath = datapath
     
     @classmethod
-    def build_dataloader(cls, benchmark, bsz, nworker, fold, split):
+    def build_dataloader(cls, benchmark, bsz, nworker, split):
         nworker = nworker if split == 'train' else 0 
+        shuffle = False
         if split == 'train':
             shuffle = True
-            transforms = transforms.Compose([
-                transforms.Resize(size=(cls.img_size, cls.img_size)),
-                transforms.RandomHorizontalFlip(p=.5),
-                transforms.ToTensor(),
-                transforms.Normalize(cls.img_mean, cls.img_std)
+            transforms = transform.Compose([
+                transform.Resize(size=(cls.img_size, cls.img_size)),
+                transform.RandomHorizontalFlip(p=.5),
+                transform.ToTensor(),
+                transform.Normalize(cls.img_mean, cls.img_std)
                 ])
         else:
-            transforms = transforms.Compose([
-                transforms.Resize(size=(cls.img_size, cls.img_size)),
-                transforms.ToTensor(),
-                transforms.Normalize(cls.img_mean, cls.img_std)
+            transforms = transform.Compose([
+                transform.Resize(size=(cls.img_size, cls.img_size)),
+                transform.ToTensor(),
+                transform.Normalize(cls.img_mean, cls.img_std)
                 ])
 
         dataset = cls.datasets[benchmark](cls.datapath, transforms=transforms, split=split)
@@ -55,25 +56,29 @@ class DatasetDeepFashion(Dataset):
     def __init__(self, datapath, transforms, split):
         self.split = 'val' if split in ['val', 'test'] else 'train'
         self.datapath = datapath
+        self.img_path = os.path.join(self.datapath, self.split, 'image')
         self.transforms = transforms
         self.img_metadata = self.build_img_metadata()
     
     def __len__(self):
-        return len(self.img_metadata)
+        return len(self.img_metadata['image_name'])
 
     def __getitem__(self, idx):
         #TODO: check this if data per batch is not loaded correctly
         triplet_paths, triplet_boxes, triplet_ids = self.sample(idx)
         triplet_imgs = self.load_frames(triplet_paths, boxes=triplet_boxes)
-        triplet_imgs = self.transforms(triplet_imgs)
+        # print("after load frames")
+        # len(triplet_imgs)= 3 ; type(triplet_imgs) = list
+        # type(triplet_imgs[0])=PIL Image
+        triplet_imgs = [self.transforms(imgs) for imgs in triplet_imgs]
+        # print(triplet_imgs[0].shape=(3, 224, 224))
 
-        batch = {
-            'images': triplet_imgs,
-            'ids': triplet_ids,
-        }
-        return batch
+        # batch = {
+            # 'images': triplet_imgs, # list(torch.tensor(3, 224, 224)*3)
+            # 'ids': triplet_ids, # nd.array([np.int64, np.int64, np.int64])
+        # }
+        return triplet_imgs, triplet_ids
         
-    @classmethod
     def load_frames(self, paths, boxes=None):
         # load images from paths
         # if boxes, crop corresponding box (x1,y1,x2,y2) from image
@@ -82,15 +87,13 @@ class DatasetDeepFashion(Dataset):
             frames.append(self.read_image(path, box=box))
         return frames 
     
-    @classmethod
     def read_image(self, image_name, box=None):
         r"""Return RGB image in PIL Image"""
-        image = Image.open(os.path.join(self.img_path, image_name) + '.jpg')
-        if box:
+        image = Image.open(os.path.join(self.img_path, image_name))
+        if box is not None:
             image = image.crop(box)
         return image.convert('RGB')
 
-    @classmethod
     def sample(self, idx):
         """Sample path of triplet of images from the dataset"""
         # a_path, p_path, n_path = self.img_metadata['image_name'].iloc[idx].values
@@ -100,7 +103,6 @@ class DatasetDeepFashion(Dataset):
         ids = self.img_metadata['category_id'].iloc[idx].values
         return paths, boxes, ids
 
-    @classmethod
     def build_class_ids(self):
         """Build a dictionary of class ids"""
         class_ids = {}
@@ -108,7 +110,6 @@ class DatasetDeepFashion(Dataset):
             class_ids[class_name] = i
         return class_ids
     
-    @classmethod
     def build_img_metadata(self):
 
         def read_metadata(df):
@@ -141,12 +142,12 @@ class DatasetDeepFashion(Dataset):
                 
         df = load_csv(self.split)
 
-        img_metadata = []
+        img_metadata = {}
         if self.split in ['train', 'val']:
-            img_metadata += read_metadata(df)
+            img_metadata.update(read_metadata(df))
         else:
             raise Exception('Undefined split %s: ' %self.split)
         
-        print('Total (%s) images are: %d' %(self.split, len(img_metadata)))
+        print('Total (%s) images are: %d' %(self.split, len(img_metadata['image_name'])))
         return img_metadata
     
