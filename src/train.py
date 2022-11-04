@@ -57,7 +57,7 @@ def get_wandb_logger(hparams):
         hparams.wandb_id = None
     
     logger = pl.loggers.WandbLogger(
-        project="visual-search",
+        project=hparams.project_name,
         save_dir="checkpoints",
         name=hparams.exp_name,
         id=hparams.wandb_id
@@ -78,16 +78,17 @@ def get_default_argument_parser():
     parser = ArgumentParser(add_help=False)
 
     parser.add_argument(
-        '--project-name',
-        type=str,
-        default='visual-search',
-    )
-
-    parser.add_argument(
         '--exp-name',
         type=str,
         required=True,
     )
+    
+    parser.add_argument(
+        '--project_name',
+        type=str,
+        default='visual-search',
+    )
+
     
     parser.add_argument(
         '--backbone',
@@ -116,7 +117,7 @@ def get_default_argument_parser():
 
     return parser
 
-def make_checkpoint_callbacks(exp_name, base_path='checkpoints', frequency=1):
+def make_checkpoint_callbacks(exp_name, base_path='checkpoints', frequency=None):
     base_callback = pl.callbacks.ModelCheckpoint(
         dirpath=f"{base_path}/{exp_name}/checkpoints",
         save_last=True,
@@ -124,11 +125,11 @@ def make_checkpoint_callbacks(exp_name, base_path='checkpoints', frequency=1):
     )
 
     val_callback = pl.callbacks.ModelCheckpoint(
-        monitor="val/loss_best",
+        monitor="val/loss",
         dirpath=f"{base_path}/{exp_name}/checkpoints",
         filename="result-{epoch}-{val_loss:.2f}",
-        mode="max",
-        save_top_k=-1,
+        mode="min",
+        save_top_k=-1,  # save all checkpoints
         verbose=True,
     )
 

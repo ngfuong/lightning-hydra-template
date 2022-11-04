@@ -1,4 +1,5 @@
 from typing import Any, List
+import math
 from argparse import ArgumentParser
 
 import torch
@@ -51,8 +52,8 @@ class VisualSearchModule(LightningModule):
         self.save_hyperparameters(logger=False, ignore=['kwargs'])
 
         # self.benchmark = dataset
-        self.batch_size = batch_size
-        self.base_lr = base_lr
+        self.batch_size = batch_size    # base_batch_size = 16
+        self.base_lr = base_lr * math.sqrt(self.batch_size / 16)
         self.epochs = max_epochs
         
         self.args = self.get_args()
@@ -60,6 +61,7 @@ class VisualSearchModule(LightningModule):
         self.args.benchmark = dataset
         self.args.bsz = self.batch_size
         self.other_kwargs = kwargs
+        self.write_batch_idx = 1000 * 16 / self.batch_size
 
         self.criterion = torch.nn.TripletMarginLoss(margin=1.0, p=2)
 
@@ -117,6 +119,13 @@ class VisualSearchModule(LightningModule):
         # self.log("train/acc", self.train_acc, on_step=False, on_epoch=True, prog_bar=True)
         self.train_loss.update(loss)
         # self.train_acc(preds, targets)
+        if self.global_rank == 0:
+            if batch_idx % self.write_batch_idx == 0: 
+                msg = '[Epoch: %02d] ' % self.current_epoch
+                msg += '[Batch: %06d/%06d] ' % (batch_idx+1, self.len_train_dataloader)
+                msg += 'L: %6.5f ' % loss
+                msg += 'Avg L: %6.5f ' % self.train_loss.compute()
+                Logger.info(msg)
 
         # we can return here dict with any tensors
         # and then read it in some callback or in `training_epoch_end()` below
@@ -129,8 +138,13 @@ class VisualSearchModule(LightningModule):
         # `outputs` is a list of dicts returned from `training_step()`
         if self.global_rank == 0:
             self.log('Training', self.current_epoch)
-        
-        self.log("AvgTrainLoss", self.train_loss.compute(), on_epoch=True)
+
+        msg = '\n*** Train '
+        msg += '[@Epoch %02d] ' % self.current_epoch
+        msg += 'Avg L: %6.5f' % self.train_loss.compute()
+        msg += '***\n'
+        # self.log("Train Avg L", self.train_loss.compute(), on_epoch=True)
+        Logger.info(msg)
 
 
     def validation_step(self, batch: Any, batch_idx: int):
@@ -144,6 +158,13 @@ class VisualSearchModule(LightningModule):
         # self.log("val/acc", self.val_acc, on_step=False, on_epoch=True, prog_bar=True)
         self.val_loss.update(loss)
         # self.val_acc(preds, targets)
+        if self.global_rank == 0:
+            if batch_idx % self.write_batch_idx == 0: 
+                msg = '[Epoch: %02d] ' % self.current_epoch
+                msg += '[Batch: %06d/%06d] ' % (batch_idx+1, self.len_val_dataloader)
+                msg += 'L: %6.5f' % loss
+                msg += 'Avg L: %6.5f' % self.val_loss.compute()
+                Logger.info(msg)
 
         # return {"loss": loss, "preds": preds, "targets": targets}
         return loss
@@ -152,21 +173,28 @@ class VisualSearchModule(LightningModule):
     def validation_epoch_end(self, outputs: List[Any]):
         if self.global_rank == 0:
             self.log('Validation', self.current_epoch)
+            
         loss = self.val_loss.compute()  # get epoch val loss
-        self.val_loss_best(loss)  # update best so far val loss
+        msg = '\n*** Validation'
+        msg += '[@Epoch %02d] ' % self.current_epoch
+        msg += 'Avg L: %6.5f' % loss
+        msg += '***\n'
+        Logger.info(msg)
+
+        self.val_loss_best.update(loss)  # update best so far val loss
         # log `val_acc_best` as a value through `.compute()` method, instead of as a metric object
         # otherwise metric would be reset by lightning after each epoch
         self.log("val/loss_best", self.val_loss_best.compute(), prog_bar=True)
 
         if self.global_rank==0:
             Logger.tbd_writer.add_scalars('loss', {'train': self.train_loss.compute(), 'val': loss}, self.current_epoch)
-            # Logger.tbd_writer.add_scalars('val_loss', {self.val_loss}, self.current_epoch)
             Logger.tbd_writer.flush()
             if self.current_epoch + 1 == self.epochs:
                 Logger.tbd_writer.close()
                 Logger.info('=========== Finished Training ===========')
 
     def test_step(self, batch: Any, batch_idx: int):
+        """
         images,ids = batch
 
         a, p, n = [self(x) for x in images]
@@ -179,6 +207,8 @@ class VisualSearchModule(LightningModule):
         # self.log("test/acc", self.test_acc, on_step=False, on_epoch=True, prog_bar=True)
 
         return {"loss": loss, "ids": ids}
+        """
+        pass
 
     def test_epoch_end(self, outputs: List[Any]):
         pass
@@ -199,8 +229,8 @@ class VisualSearchModule(LightningModule):
         optimizer = torch.optim.SGD(
             params_list,
             lr=self.base_lr,
-            momentum=0.9,
-            weight_decay=1e-3
+            momentum=self.other_kwargs['weight_decay'],
+            weight_decay=self.other_kwargs['weight_decay']
         )
     
         scheduler = torch.optim.lr_scheduler.LambdaLR(
@@ -257,15 +287,27 @@ class VisualSearchModule(LightningModule):
         )
 
         parser.add_argument(
-            '--base_lr',
-            type=float,
-            default=1e-3,
+            '--batch_size',
+            type=int,
+            default=16
         )
 
         parser.add_argument(
-            '--batch_size',
-            type=int,
-            default=16,
+            '--base_lr',
+            type=float,
+            default=1e-3
+        )
+
+        parser.add_argument(
+            '--weight_decay',
+            type=float,
+            default=1e-4
+        )
+        
+        parser.add_argument(
+            '--momentum',
+            type=float,
+            default=0.9
         )
 
         return parser

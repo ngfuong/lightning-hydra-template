@@ -10,11 +10,12 @@ data/
         val_triplets.csv
 ```
 ## Create environment
-Using pip:
+In root (repo) directory, create and activate environment using `pip`:
 ```
 python -m venv ./vs
 source ./vs/bin/activate
 pip install -r requirements.txt
+pip install -e .
 ```
 # Train Scripts
 Scripts are located under `scripts/`
