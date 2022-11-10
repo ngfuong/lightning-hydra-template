@@ -3,10 +3,10 @@ from typing import Any, Dict, Optional
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
 
-from src.datamodules.datasets import DatasetDeepFashion
+from src.datamodules.datasets import DatasetDeepFashionOnlineTriplet
 
 
-class DeepFashionDataModule(LightningDataModule):
+class OnlineTripletDataModule(LightningDataModule):
     """Example of LightningDataModule for MNIST dataset.
 
     A DataModule implements 5 key methods:
@@ -51,7 +51,7 @@ class DeepFashionDataModule(LightningDataModule):
         self.save_hyperparameters(logger=False)
 
         self.datasets = {
-            "deepfashion": DatasetDeepFashion,
+            "deepfashion": DatasetDeepFashionOnlineTriplet,
         }
 
         if imagenet_norm:
@@ -179,16 +179,3 @@ class DeepFashionDataModule(LightningDataModule):
     def load_state_dict(self, state_dict: Dict[str, Any]):
         """Things to do when loading checkpoint."""
         pass
-
-
-if __name__ == "__main__":
-    import hydra
-    import omegaconf
-    import pyrootutils
-
-    root = pyrootutils.setup_root(__file__, pythonpath=True)
-    cfg = omegaconf.OmegaConf.load(
-        root / "configs" / "datamodule" / "deepfashion2.yaml"
-    )
-    cfg.data_dir = str(root / "data")
-    _ = hydra.utils.instantiate(cfg)
