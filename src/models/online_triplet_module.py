@@ -16,7 +16,7 @@ from utils.logger import Logger
 
 
 class VS_args:
-    datapath = "data/deepfashion2"
+    datapath = "../deepfashion2"
     benchmark = "deepfashion"
     logpath = "logs"
     nworker = 8
@@ -115,8 +115,11 @@ class OnlineTripletModule(LightningModule):
 
         images, ids = batch
 
-        a, p, n = [self(x) for x in images]
-        loss = self.criterion(labels=ids, embeddings=images, margin=1, squared=True)
+        embeddings = self(images)
+        ids = torch.FloatTensor(ids)
+
+        print(embeddings.shape, ids.shape)
+        loss = self.criterion(labels=ids, embeddings=embeddings, margin=1, squared=True)
 
         # update and log metrics
         self.log("train/loss", loss, on_step=True, on_epoch=False, prog_bar=True)
@@ -156,7 +159,11 @@ class OnlineTripletModule(LightningModule):
     def validation_step(self, batch: Any, batch_idx: int):
         images, ids = batch
 
-        loss = self.criterion(labels=ids, embeddings=images, margin=1, squared=True)
+        embeddings = self(images)
+        ids = torch.FloatTensor(ids)
+        print(embeddings.shape, ids.shape)
+
+        loss = self.criterion(labels=ids, embeddings=embeddings, margin=1, squared=True)
 
         # update and log metrics
         self.log("val/loss", loss, on_step=True, on_epoch=False, prog_bar=True)

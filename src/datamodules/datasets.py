@@ -230,6 +230,7 @@ class DeepFashionOnlineTripletDataset(Dataset):
         self.img_path = os.path.join(self.datapath, self.split, "image")
         self.transforms = transforms
         self.img_metadata = self.build_img_metadata()
+        self.class_ids = self.build_class_ids()
 
     def __len__(self):
         return len(self.img_metadata["image_name"])
@@ -244,6 +245,7 @@ class DeepFashionOnlineTripletDataset(Dataset):
         img = self.transforms(img)
         # print(triplet_imgs[0].shape=(3, 224, 224))
 
+        label = self.class_ids[label]
         # batch = {
         # 'images': triplet_imgs, # list(torch.tensor(3, 224, 224)*3)
         # 'ids': triplet_ids, # nd.array([np.int64, np.int64, np.int64])
@@ -274,7 +276,7 @@ class DeepFashionOnlineTripletDataset(Dataset):
     def build_class_ids(self):
         """Build a dictionary of class ids"""
         class_ids = {}
-        for i, class_name in enumerate(self.df["class_name"].unique()):
+        for i, class_name in enumerate(self.df["label"].unique()):
             class_ids[class_name] = i
         return class_ids
 
@@ -287,10 +289,10 @@ class DeepFashionOnlineTripletDataset(Dataset):
                 category_id
             """
             metadata = {
-                "image_name": df[["image_name"]].values.tolist(),
+                "image_name": df["image_name"].values.tolist(),
                 "box": df[["x_1", "y_1", "x_2", "y_2"]].values.tolist(),
-                "category_id": df[["category_id"]].values.tolist(),
-                "label": df[["label"]].values.tolist(),
+                "category_id": df["category_id"].values.tolist(),
+                "label": df["label"].values.tolist(),
             }
             return metadata
 

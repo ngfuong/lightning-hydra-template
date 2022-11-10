@@ -1,9 +1,10 @@
 import glob
 import os
+from argparse import ArgumentParser
 
 import pytorch_lightning as pl
 
-from src.datamodules.online_triplet_datamodule import OnlineTripletModule
+from src.models.online_triplet_module import OnlineTripletModule
 from src.utils import utils
 
 

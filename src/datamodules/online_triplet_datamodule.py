@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader
 
-from src.datamodules.datasets import DatasetDeepFashionOnlineTriplet
+from src.datamodules.datasets import DeepFashionOnlineTripletDataset
 
 
 class OnlineTripletDataModule(LightningDataModule):
@@ -51,7 +51,7 @@ class OnlineTripletDataModule(LightningDataModule):
         self.save_hyperparameters(logger=False)
 
         self.datasets = {
-            "deepfashion": DatasetDeepFashionOnlineTriplet,
+            "deepfashion": DeepFashionOnlineTripletDataset,
         }
 
         if imagenet_norm:
