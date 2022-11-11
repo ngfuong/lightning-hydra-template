@@ -65,7 +65,7 @@ class OnlineTripletModule(LightningModule):
         self.other_kwargs = kwargs
         self.write_batch_idx = 1000 * 16 / self.batch_size
 
-        self.criterion = batch_hard_triplet_loss
+        self.criterion = batch_all_triplet_loss
 
         # for averaging loss across batches
         self.train_loss = MeanMetric()
@@ -116,10 +116,10 @@ class OnlineTripletModule(LightningModule):
         images, ids = batch
 
         embeddings = self(images)
-        ids = torch.FloatTensor(ids)
 
-        print(embeddings.shape, ids.shape)
-        loss = self.criterion(labels=ids, embeddings=embeddings, margin=1, squared=True)
+        loss, _ = self.criterion(
+            labels=ids, embeddings=embeddings, margin=1, squared=True
+        )
 
         # update and log metrics
         self.log("train/loss", loss, on_step=True, on_epoch=False, prog_bar=True)
@@ -160,10 +160,10 @@ class OnlineTripletModule(LightningModule):
         images, ids = batch
 
         embeddings = self(images)
-        ids = torch.FloatTensor(ids)
-        print(embeddings.shape, ids.shape)
 
-        loss = self.criterion(labels=ids, embeddings=embeddings, margin=1, squared=True)
+        loss, _ = self.criterion(
+            labels=ids, embeddings=embeddings, margin=1, squared=True
+        )
 
         # update and log metrics
         self.log("val/loss", loss, on_step=True, on_epoch=False, prog_bar=True)

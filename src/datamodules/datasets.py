@@ -301,11 +301,11 @@ class DeepFashionOnlineTripletDataset(Dataset):
                 df = pd.read_csv(f)
                 return df
 
-        df = load_csv(self.split)
+        self.df = load_csv(self.split)
 
         img_metadata = {}
         if self.split in ["train", "val"]:
-            img_metadata.update(read_metadata(df))
+            img_metadata.update(read_metadata(self.df))
         else:
             raise Exception("Undefined split %s: " % self.split)
 
