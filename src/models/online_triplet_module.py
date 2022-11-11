@@ -177,9 +177,14 @@ class OnlineTripletModule(LightningModule):
         ids = torch.squeeze(ids, dim=0)
         embeddings = self(images)
 
-        loss, _ = self.criterion(
-            labels=ids, embeddings=embeddings, margin=1, squared=True
-        )
+        if self.loss_type == "batch_all":
+            loss, _ = self.criterion(
+                labels=ids, embeddings=embeddings, margin=1, squared=True
+            )
+        elif self.loss_type == "batch_hard":
+            loss = self.criterion(
+                labels=ids, embeddings=embeddings, margin=1, squared=True
+            )
 
         # update and log metrics
         self.log("val/loss", loss, on_step=True, on_epoch=False, prog_bar=True)
