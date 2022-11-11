@@ -1,15 +1,13 @@
+import random
 import time
-import os
 import warnings
 from importlib.util import find_spec
 from pathlib import Path
-from typing import Any, Callable, Dict, List
-from argparse import ArgumentParser
+from typing import Callable, List
 
 import hydra
-from omegaconf import DictConfig
 import torch
-from pytorch_lightning import loggers
+from omegaconf import DictConfig
 from pytorch_lightning import Callback
 from pytorch_lightning.loggers import LightningLoggerBase
 from pytorch_lightning.utilities import rank_zero_only
@@ -18,9 +16,11 @@ from src.utils import pylogger, rich_utils
 
 log = pylogger.get_pylogger(__name__)
 
+
 def fix_randseed(seed):
     """Fixes random seed for reproducibility."""
     import random
+
     import numpy as np
 
     random.seed(seed)
@@ -30,13 +30,13 @@ def fix_randseed(seed):
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
+
 def to_cuda(batch):
     for key, value in batch.items():
         if isinstance(value, torch.Tensor):
             batch[key] = value.cuda()
-    
-    return batch
 
+    return batch
 
 
 #################
@@ -67,8 +67,12 @@ def task_wrapper(task_func: Callable) -> Callable:
             raise ex
         finally:
             path = Path(cfg.paths.output_dir, "exec_time.log")
-            content = f"'{cfg.task_name}' execution time: {time.time() - start_time} (s)"
-            save_file(path, content)  # save task execution time (even if exception occurs)
+            content = (
+                f"'{cfg.task_name}' execution time: {time.time() - start_time} (s)"
+            )
+            save_file(
+                path, content
+            )  # save task execution time (even if exception occurs)
             close_loggers()  # close loggers (even if exception occurs so multirun won't fail)
 
         log.info(f"Output dir: {cfg.paths.output_dir}")
@@ -228,3 +232,14 @@ def close_loggers() -> None:
         if wandb.run:
             log.info("Closing wandb!")
             wandb.finish()
+
+
+def random_exclusion(start, stop, excluded) -> int:
+    """Function for getting a random number with some numbers excluded"""
+    excluded = set(excluded)
+    value = random.randint(start, stop - len(excluded))  # Or you could use randrange
+    for exclusion in tuple(excluded):
+        if value < exclusion:
+            break
+        value += 1
+    return value
