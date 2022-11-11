@@ -43,7 +43,7 @@ class DeepFashionDataModule(LightningDataModule):
         img_size: int = 256,
         imagenet_norm: bool = False,
         batch_size: int = 64,
-        num_workers: int = 0,
+        num_workers: int = 1,
         pin_memory: bool = False,
     ):
         super().__init__()

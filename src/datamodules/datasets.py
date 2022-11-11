@@ -136,7 +136,7 @@ class DatasetDeepFashion(Dataset):
             return metadata
         
         def load_csv(split):
-            with open(os.path.join(self.datapath, split + '_triplets.csv'), 'r') as f:
+            with open(os.path.join(self.datapath, split + '_triplets_small.csv'), 'r') as f:
                 df = pd.read_csv(f)
                 return df
                 
