@@ -378,7 +378,7 @@ class DeepFashionOnlineTripletBalanceDataset(Dataset):
 
         if missing_value <= 0:
             exclude_ids = random.choices(
-                exclude_ids, k=(self.batch_size * self.negative_percentage)
+                exclude_ids, k=int(self.batch_size * self.negative_percentage)
             )
             pair_df = pair_df[exclude_ids]
 
