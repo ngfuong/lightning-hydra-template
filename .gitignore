@@ -76,3 +76,6 @@ configs/local/default.yaml
 logs/
 .env
 .autoenv
+
+# Data directory
+deepfashion2
