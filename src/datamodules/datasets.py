@@ -380,7 +380,7 @@ class DeepFashionOnlineTripletBalanceDataset(Dataset):
             exclude_ids = random.choices(
                 exclude_ids, k=int(self.batch_size * self.negative_percentage)
             )
-            pair_df = pair_df[exclude_ids]
+            pair_df = pair_df.iloc[exclude_ids, :]
 
         random_ids = [
             random_exclusion(0, len(self.df) - 1, exclude_ids)
