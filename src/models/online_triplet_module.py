@@ -122,8 +122,9 @@ class OnlineTripletModule(LightningModule):
 
         images, ids = batch
 
-        images = torch.squeeze(images, dim=0)
-        ids = torch.squeeze(ids, dim=0)
+        images = images.reshape((-1, *images.shape[2:]))
+        ids = ids.reshape((-1,))
+
         embeddings = self(images)
 
         if self.loss_type == "batch_all":
@@ -174,8 +175,8 @@ class OnlineTripletModule(LightningModule):
     def validation_step(self, batch: Any, batch_idx: int):
         images, ids = batch
 
-        images = torch.squeeze(images, dim=0)
-        ids = torch.squeeze(ids, dim=0)
+        images = images.reshape((-1, *images.shape[2:]))
+        ids = ids.reshape((-1,))
         embeddings = self(images)
 
         if self.loss_type == "batch_all":
