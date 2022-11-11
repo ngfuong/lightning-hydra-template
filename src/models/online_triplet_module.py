@@ -19,7 +19,7 @@ class VS_args:
     datapath = "data"
     benchmark = "deepfashion"
     logpath = "logs"
-    nworker = 8
+    nworker = 4
     bsz = 1024
 
 
@@ -161,15 +161,16 @@ class OnlineTripletModule(LightningModule):
     def training_epoch_end(self, outputs: List[Any]):
         # `outputs` is a list of dicts returned from `training_step()`
         if self.global_rank == 0:
-            self.log("Training", self.current_epoch)
-
-        msg = "\n*** Train "
-        msg += "[@Epoch %02d] " % self.current_epoch
-        msg += "Avg L: %6.5f" % self.train_loss.compute()
-        msg += "***\n"
-        # self.log("Train Avg L", self.train_loss.compute(), on_epoch=True)
-        Logger.info(msg)
-
+            loss = self.train_loss.compute()
+            msg = '\n*** Train '
+            msg += '[@Epoch %02d] ' % self.current_epoch
+            msg += 'Avg L: %6.5f' % self.train_loss.compute()
+            msg += '***\n'
+            # self.log("Train Avg L", self.train_loss.compute(), on_epoch=True)
+            Logger.info(msg)
+        
+        # Log epoch loss
+        self.log('train/loss', loss, on_epoch=True)
     def validation_step(self, batch: Any, batch_idx: int):
         images, ids = batch
 
@@ -205,15 +206,14 @@ class OnlineTripletModule(LightningModule):
 
     def validation_epoch_end(self, outputs: List[Any]):
         if self.global_rank == 0:
-            self.log("Validation", self.current_epoch)
+            loss = self.val_loss.compute()  # get epoch val loss
+            msg = '\n*** Validation'
+            msg += '[@Epoch %02d] ' % self.current_epoch
+            msg += 'Avg L: %6.5f' % loss
+            msg += '***\n'
+            Logger.info(msg)
 
-        loss = self.val_loss.compute()  # get epoch val loss
-        msg = "\n*** Validation"
-        msg += "[@Epoch %02d] " % self.current_epoch
-        msg += "Avg L: %6.5f" % loss
-        msg += "***\n"
-        Logger.info(msg)
-
+        self.log("val/loss", loss, on_epoch=True)
         self.val_loss_best.update(loss)  # update best so far val loss
         # log `val_acc_best` as a value through `.compute()` method, instead of as a metric object
         # otherwise metric would be reset by lightning after each epoch

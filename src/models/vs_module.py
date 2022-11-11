@@ -188,7 +188,11 @@ class VisualSearchModule(LightningModule):
         self.log("val/loss_best", self.val_loss_best.compute(), prog_bar=True)
 
         if self.global_rank==0:
-            Logger.tbd_writer.add_scalars('loss', {'train': self.train_loss.compute(), 'val': loss}, self.current_epoch)
+            Logger.tbd_writer.add_scalars(
+                'loss', 
+                {'train': self.train_loss.compute(), 'val': loss}, 
+                self.current_epoch,
+                )
             Logger.tbd_writer.flush()
             if self.current_epoch + 1 == self.epochs:
                 Logger.tbd_writer.close()
