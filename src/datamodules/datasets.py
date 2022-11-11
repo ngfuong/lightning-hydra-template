@@ -7,7 +7,7 @@ import torchvision.transforms as transform
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 
-from src.utils.utils import random_exclusion
+from src.utils.utils import collate_fn, random_exclusion
 
 
 class VSDataset:
@@ -154,7 +154,7 @@ class DatasetDeepFashion(Dataset):
             return metadata
 
         def load_csv(split):
-            with open(os.path.join(self.datapath, split + '_triplets.csv'), 'r') as f:
+            with open(os.path.join(self.datapath, split + "_triplets.csv"), "r") as f:
                 df = pd.read_csv(f)
                 return df
 
@@ -222,6 +222,7 @@ class OnlineTripletDataset:
             shuffle=shuffle,
             num_workers=nworker,
             pin_memory=True,
+            collate_fn=collate_fn,
         )
 
         return dataloader

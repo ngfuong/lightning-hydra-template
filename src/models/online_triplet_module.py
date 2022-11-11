@@ -122,8 +122,8 @@ class OnlineTripletModule(LightningModule):
 
         images, ids = batch
 
-        images = images.reshape((-1, *images.shape[2:]))
-        ids = ids.reshape((-1,))
+        images = torch.squeeze(torch.cat(images, 0), 0)
+        ids = torch.squeeze(torch.cat(ids, 0), 0)
 
         embeddings = self(images)
 
@@ -163,20 +163,21 @@ class OnlineTripletModule(LightningModule):
         # `outputs` is a list of dicts returned from `training_step()`
         if self.global_rank == 0:
             loss = self.train_loss.compute()
-            msg = '\n*** Train '
-            msg += '[@Epoch %02d] ' % self.current_epoch
-            msg += 'Avg L: %6.5f' % self.train_loss.compute()
-            msg += '***\n'
+            msg = "\n*** Train "
+            msg += "[@Epoch %02d] " % self.current_epoch
+            msg += "Avg L: %6.5f" % self.train_loss.compute()
+            msg += "***\n"
             # self.log("Train Avg L", self.train_loss.compute(), on_epoch=True)
             Logger.info(msg)
-        
+
         # Log epoch loss
-        self.log('train/loss', loss, on_epoch=True)
+        self.log("train/loss", loss, on_epoch=True)
+
     def validation_step(self, batch: Any, batch_idx: int):
         images, ids = batch
 
-        images = images.reshape((-1, *images.shape[2:]))
-        ids = ids.reshape((-1,))
+        images = torch.squeeze(torch.cat(images, 0), 0)
+        ids = torch.squeeze(torch.cat(ids, 0), 0)
         embeddings = self(images)
 
         if self.loss_type == "batch_all":
@@ -208,10 +209,10 @@ class OnlineTripletModule(LightningModule):
     def validation_epoch_end(self, outputs: List[Any]):
         if self.global_rank == 0:
             loss = self.val_loss.compute()  # get epoch val loss
-            msg = '\n*** Validation'
-            msg += '[@Epoch %02d] ' % self.current_epoch
-            msg += 'Avg L: %6.5f' % loss
-            msg += '***\n'
+            msg = "\n*** Validation"
+            msg += "[@Epoch %02d] " % self.current_epoch
+            msg += "Avg L: %6.5f" % loss
+            msg += "***\n"
             Logger.info(msg)
 
         self.log("val/loss", loss, on_epoch=True)
