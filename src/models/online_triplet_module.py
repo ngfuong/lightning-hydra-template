@@ -16,7 +16,7 @@ from utils.logger import Logger
 
 
 class VS_args:
-    datapath = "../deepfashion2"
+    datapath = "data"
     benchmark = "deepfashion"
     logpath = "logs"
     nworker = 8
@@ -122,6 +122,8 @@ class OnlineTripletModule(LightningModule):
 
         images, ids = batch
 
+        images = torch.squeeze(images, dim=0)
+        ids = torch.squeeze(ids, dim=0)
         embeddings = self(images)
 
         if self.loss_type == "batch_all":
@@ -171,6 +173,8 @@ class OnlineTripletModule(LightningModule):
     def validation_step(self, batch: Any, batch_idx: int):
         images, ids = batch
 
+        images = torch.squeeze(images, dim=0)
+        ids = torch.squeeze(ids, dim=0)
         embeddings = self(images)
 
         loss, _ = self.criterion(
@@ -301,7 +305,7 @@ class OnlineTripletModule(LightningModule):
     def add_model_specific_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
         parser.add_argument(
-            "--datapath", type=str, default="data/deepfashion2", help="path of datasets"
+            "--datapath", type=str, default="data", help="path of datasets"
         )
 
         parser.add_argument(

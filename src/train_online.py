@@ -110,6 +110,12 @@ def get_default_argument_parser():
         default=False,
         help="resume if have a checkpoint",
     )
+    parser.add_argument(
+        "--loss",
+        type=str,
+        default="batch_hard",
+        help="online triplet loss type",
+    )
 
     return parser
 

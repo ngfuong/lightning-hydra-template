@@ -2,6 +2,7 @@ import os
 import random
 
 import pandas as pd
+import torch
 import torchvision.transforms as transform
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
@@ -175,7 +176,7 @@ class OnlineTripletDataset:
     @classmethod
     def initialize(cls, img_size, datapath, imagenet_norm=False):
         cls.datasets = {
-            "deepfashion": DeepFashionOnlineTripletDataset,
+            "deepfashion": DeepFashionOnlineTripletBalanceDataset,
         }
 
         if imagenet_norm:
@@ -330,24 +331,27 @@ class DeepFashionOnlineTripletBalanceDataset(Dataset):
         self.class_ids = self.build_class_ids()
 
     def __len__(self):
-        return len(self.img_metadata["image_name"])
+        return len(self.img_metadata)
 
     def __getitem__(self, idx):
         # TODO: check this if data per batch is not loaded correctly
-        path, boxes, label = self.sample(idx)
-        img = self.load_frames(path, boxes=boxes)
+        paths, boxes, labels = self.sample(idx)
         # print("after load frames")
         # len(triplet_imgs)= 3 ; type(triplet_imgs) = list
         # type(triplet_imgs[0])=PIL Image
-        img = self.transforms(img)
         # print(triplet_imgs[0].shape=(3, 224, 224))
+        imgs = self.load_frames(paths=paths, boxes=boxes)
+        imgs = [self.transforms(img) for img in imgs]
 
-        label = self.class_ids[label]
+        labels = [self.class_ids[label] for label in labels]
+
         # batch = {
         # 'images': triplet_imgs, # list(torch.tensor(3, 224, 224)*3)
         # 'ids': triplet_ids, # nd.array([np.int64, np.int64, np.int64])
         # }
-        return img, label
+        imgs = torch.stack(imgs)
+        labels = torch.Tensor(labels)
+        return imgs, labels
 
     def load_frames(self, paths, boxes=None):
         # load images from paths
@@ -370,7 +374,8 @@ class DeepFashionOnlineTripletBalanceDataset(Dataset):
         pair_df = self.img_metadata[idx]
 
         missing_value = self.batch_size - len(pair_df)
-        exclude_ids = pair_df.index
+        exclude_ids = pair_df.index.values
+
         if missing_value <= 0:
             exclude_ids = random.choices(
                 exclude_ids, k=(self.batch_size * self.negative_percentage)
@@ -378,22 +383,18 @@ class DeepFashionOnlineTripletBalanceDataset(Dataset):
             pair_df = pair_df[exclude_ids]
 
         random_ids = [
-            random_exclusion(0, len(self.df), exclude_ids) for _ in range(missing_value)
+            random_exclusion(0, len(self.df) - 1, exclude_ids)
+            for _ in range(missing_value)
         ]
 
-        missing_df = self.df[random_ids]
+        missing_df = self.df.iloc[random_ids, :]
         sample_df = pd.concat([pair_df, missing_df])
 
-        paths = sample_df["image_name"].values
-        boxes = sample_df[["x_1", "y_1", "x_2", "y_2"]].values.reshape((3, -1))
-        labels = sample_df["label"].values
+        paths = sample_df["image_name"].values.tolist()
+        boxes = sample_df[["x_1", "y_1", "x_2", "y_2"]].values.tolist()
+        labels = sample_df["label"].values.tolist()
 
-        imgs = self.load_frames(paths=paths, boxes=boxes)
-        imgs = [self.transforms(img) for img in imgs]
-
-        labels = [self.class_ids[label] for label in labels]
-
-        return imgs, labels
+        return paths, boxes, labels
 
     def build_class_ids(self):
         """Build a dictionary of class ids"""
@@ -430,7 +431,5 @@ class DeepFashionOnlineTripletBalanceDataset(Dataset):
         else:
             raise Exception("Undefined split %s: " % self.split)
 
-        print(
-            "Total (%s) images are: %d" % (self.split, len(img_metadata["image_name"]))
-        )
+        print("Total (%s) images are: %d" % (self.split, len(img_metadata)))
         return img_metadata
