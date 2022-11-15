@@ -19,7 +19,7 @@ class VS_args:
     datapath = "data"
     benchmark = "deepfashion"
     logpath = "logs"
-    nworker = 4
+    nworker = 1
     bsz = 1024
 
 

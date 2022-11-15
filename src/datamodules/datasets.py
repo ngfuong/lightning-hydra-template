@@ -30,7 +30,7 @@ class VSDataset:
 
     @classmethod
     def build_dataloader(cls, benchmark, bsz, nworker, split):
-        nworker = nworker if split == "train" else 0
+        nworker = nworker
         shuffle = False
         if split == "train":
             shuffle = True
@@ -192,7 +192,7 @@ class OnlineTripletDataset:
 
     @classmethod
     def build_dataloader(cls, benchmark, bsz, nworker, split):
-        nworker = nworker if split == "train" else 0
+        nworker = nworker
         shuffle = False
         if split == "train":
             shuffle = True

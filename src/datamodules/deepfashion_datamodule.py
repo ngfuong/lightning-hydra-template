@@ -75,7 +75,7 @@ class DeepFashionDataModule(LightningDataModule):
 
     @classmethod
     def build_dataloader(self, benchmark, bsz, nworker, split, pin_memory=False):
-        nworker = nworker if split == "train" else 0
+        nworker = nworker
         if split == "train":
             shuffle = True
             transforms = transforms.Compose(
