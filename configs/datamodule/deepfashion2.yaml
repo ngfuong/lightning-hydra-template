@@ -1,6 +1,0 @@
-_target_: src.datamodules.datasets
-data_dir: ${paths.data_dir}
-batch_size: 16
-train_val_test_split: [55_000, 5_000, 10_000]
-num_workers: 0
-pin_memory: False
