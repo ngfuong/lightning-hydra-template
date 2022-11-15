@@ -102,24 +102,7 @@ class OnlineTripletModule(LightningModule):
     def get_args(self):
         return VS_args()
 
-    """
-    def step(self, batch: Any):
-        images = batch
-        anchor, positive, negative = images[0], images[1], images[2]
-        anchor, positive, negative = self.forward(anchor), self.forward(positive), self.forward(negative)
-        loss = self.criterion(anchor, positive, negative)
-        #TODO: compute logits (to compare with labels y)
-        # preds_positive = torch.argmax(positive, dim=1)
-        # preds_negative = torch.argmax(negative, dim=1)
-        # preds = anchor, preds_positive, preds_negative
-        # return loss, preds, y
-        # return loss, y
-        return loss
-    """
-
     def training_step(self, batch: Any, batch_idx: int):
-        # loss, preds, targets = self.step(batch)
-
         images, ids = batch
 
         images = torch.squeeze(torch.cat(images, 0), 0)
@@ -147,7 +130,7 @@ class OnlineTripletModule(LightningModule):
                 msg += "[Batch: %06d/%06d] " % (
                     batch_idx + 1,
                     self.len_train_dataloader,
-                )
+                    )
                 msg += "L: %6.5f " % loss
                 msg += "Avg L: %6.5f " % self.train_loss.compute()
                 Logger.info(msg)
@@ -157,7 +140,6 @@ class OnlineTripletModule(LightningModule):
         # remember to always return loss from `training_step()` or backpropagation will fail!
         # return {"loss": loss, "preds": preds, "targets": targets}
         return loss
-        # return {"loss": loss}
 
     def training_epoch_end(self, outputs: List[Any]):
         # `outputs` is a list of dicts returned from `training_step()`
@@ -165,13 +147,13 @@ class OnlineTripletModule(LightningModule):
             loss = self.train_loss.compute()
             msg = "\n*** Train "
             msg += "[@Epoch %02d] " % self.current_epoch
-            msg += "Avg L: %6.5f" % self.train_loss.compute()
+            msg += "Avg L: %6.5f" % loss
             msg += "***\n"
-            # self.log("Train Avg L", self.train_loss.compute(), on_epoch=True)
             Logger.info(msg)
 
         # Log epoch loss
-        self.log("train/loss", loss, on_epoch=True)
+        self.log("train/loss_epoch", loss)
+
 
     def validation_step(self, batch: Any, batch_idx: int):
         images, ids = batch
@@ -202,9 +184,7 @@ class OnlineTripletModule(LightningModule):
                 msg += "Avg L: %6.5f" % self.val_loss.compute()
                 Logger.info(msg)
 
-        # return {"loss": loss, "preds": preds, "targets": targets}
         return loss
-        # return {"loss": loss, "ids": ids}
 
     def validation_epoch_end(self, outputs: List[Any]):
         if self.global_rank == 0:
@@ -215,7 +195,7 @@ class OnlineTripletModule(LightningModule):
             msg += "***\n"
             Logger.info(msg)
 
-        self.log("val/loss", loss, on_epoch=True)
+        self.log("val/loss_epoch", loss, on_epoch=True)
         self.val_loss_best.update(loss)  # update best so far val loss
         # log `val_acc_best` as a value through `.compute()` method, instead of as a metric object
         # otherwise metric would be reset by lightning after each epoch
