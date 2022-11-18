@@ -253,6 +253,7 @@ class DeepFashionOnlineValidationDataset(Dataset):
     def load_frames(self, path, boxes=None):
         # load images from paths
         # if boxes, crop corresponding box (x1,y1,x2,y2) from image
+        path = f"{path:06d}.jpg"
         return self.read_image(path, box=boxes)
 
     def read_image(self, image_name, box=None):
@@ -315,7 +316,5 @@ class DeepFashionOnlineValidationDataset(Dataset):
         else:
             raise Exception("Undefined split %s: " % self.split)
 
-        print(
-            "Total (%s) images are: %d" % (self.split, len(img_metadata["image_name"]))
-        )
+        print("Total (%s) images are: %d" % (self.split, len(img_metadata["image_id"])))
         return img_metadata
