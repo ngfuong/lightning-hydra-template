@@ -195,14 +195,19 @@ class OnlineTripletModule(LightningModule):
         imgs = torch.stack(imgs, 0).to("cuda")
         embeddings = self(imgs)
 
+        # Convert label
+        labels = []
+        assert len(pair_ids) == len(styles)
+        for i in range(len(pair_ids)):
+            label = self.class_ids[f"{pair_ids[i]}_{styles[i]}"]
+            labels.append(label)
+
         dists, indexes = self.knn.kneighbors(embeddings, self.top_k)
-        label = f"{pair_ids[0]}_{styles[0]}"
-        current_class = self.class_ids[label]
         top_k_classes = self.gallery_classes[indexes]
         # calculate top k acc
-        self.top_k_accuracy.update(current_class, top_k_classes)
+        self.top_k_accuracy.update(labels, top_k_classes)
         #  mean reciprocal rank
-        self.mean_reciprocal_rank.update(current_class, top_k_classes)
+        self.mean_reciprocal_rank.update(labels, top_k_classes)
 
         # if self.loss_type == "batch_all":
         #     loss, _ = self.criterion(
