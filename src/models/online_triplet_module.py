@@ -202,7 +202,7 @@ class OnlineTripletModule(LightningModule):
             label = self.class_ids[f"{pair_ids[i]}_{styles[i]}"]
             labels.append(label)
 
-        dists, indexes = self.knn.kneighbors(embeddings, self.top_k)
+        dists, indexes = self.knn.kneighbors(embeddings.to("cpu"), self.top_k)
         top_k_classes = self.gallery_classes[indexes]
         # calculate top k acc
         self.top_k_accuracy.update(labels, top_k_classes)
