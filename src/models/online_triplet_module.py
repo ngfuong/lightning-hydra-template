@@ -171,8 +171,10 @@ class OnlineTripletModule(LightningModule):
 
         for batch_idx, batch in enumerate(gallery_dataloader):
             imgs, pair_ids, styles = batch
+            imgs = torch.stack(imgs, 0).to("cuda")
+
             feature_vector = self(imgs)
-            gallery_vectors.append(feature_vector)
+            gallery_vectors.append(feature_vector.to("cpu"))
             # label
             for i in range(len(pair_ids)):
                 label = f"{pair_ids[i]}_{styles[i]}"
@@ -181,20 +183,20 @@ class OnlineTripletModule(LightningModule):
                     class_count += 1
                 gallery_classes.append(class_ids[label])
 
-        gallery_vectors = torch.stack(gallery_vectors)
+        gallery_vectors = torch.cat(gallery_vectors, 0)
         self.knn = NearestNeighbors(n_neighbors=20, n_jobs=-1)
-        self.knn.fit(self.gallery_vectors)
+        self.knn.fit(gallery_vectors)
 
         self.class_ids = class_ids
         self.gallery_classes = torch.Tensor(gallery_classes)
 
     def validation_step(self, batch: Any, batch_idx: int):
         imgs, pair_ids, styles = batch
-        imgs = torch.squeeze(imgs, 0)
+        imgs = torch.stack(imgs, 0).to("cuda")
         embeddings = self(imgs)
 
         dists, indexes = self.knn.kneighbors(embeddings, self.top_k)
-        label = f"{pair_ids}_{styles}"
+        label = f"{pair_ids[0]}_{styles[0]}"
         current_class = self.class_ids[label]
         top_k_classes = self.gallery_classes[indexes]
         # calculate top k acc

@@ -25,7 +25,11 @@ class TopKAccuracy(Metric):
 class MeanReciprocalRank(Metric):
     def __init__(self):
         super().__init__()
-        self.add_state("correct", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state(
+            "correct",
+            default=torch.tensor(0.0, dtype=torch.float32),
+            dist_reduce_fx="sum",
+        )
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
     def compute(self):
