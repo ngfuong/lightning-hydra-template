@@ -44,7 +44,7 @@ class MeanReciprocalRank(Metric):
         for i in range(len(query)):
             for j in range(gallery.shape[1]):
                 if gallery[i, j] == query[i]:
-                    rank = 1 / (i + 1)
+                    rank = 1 / (j + 1)
                     break
             self.correct += rank
             self.total += 1
@@ -54,7 +54,7 @@ class MeanReciprocalRank(Metric):
         for i in range(len(query)):
             for j in range(gallery.shape[1]):
                 if gallery[i, j] == query[i]:
-                    rank = 1 / (i + 1)
+                    rank = 1 / (j + 1)
                     break
             self.correct += rank
             self.total += 1
