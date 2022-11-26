@@ -126,15 +126,31 @@ def make_checkpoint_callbacks(exp_name, base_path="checkpoints", frequency=None)
     )
 
     val_callback = pl.callbacks.ModelCheckpoint(
-        monitor="val/loss",
-        dirpath=f"{base_path}/{exp_name}/checkpoints",
-        filename="result-{epoch}-{val_loss:.2f}",
+        monitor="val/loss_epoch",
+        dirpath=f"{base_path}/{exp_name}/checkpoints/",
+        filename="result-{epoch}-{val_loss_epoch:.2f}",
         mode="min",
         save_top_k=-1,  # save all checkpoints
         verbose=True,
     )
 
-    return [base_callback, val_callback]
+    train_earlystop = pl.callbacks.EarlyStopping(
+        monitor="train/loss_epoch",
+        min_delta=0.001,
+        patience=3,
+        verbose=True,
+        mode='min',
+    )
+
+    val_earlystop = pl.callbacks.EarlyStopping(
+        monitor="val/loss_epoch",
+        min_delta=0.005,
+        patience=3,
+        verbose=True,
+        mode='min',
+    )
+
+    return [base_callback, val_callback, train_earlystop, val_earlystop]
 
 
 def set_resume_parameters(hparams):
