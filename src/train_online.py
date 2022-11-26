@@ -24,7 +24,7 @@ def do_training(hparams, model_constructor):
     wblogger = get_wandb_logger(hparams)
     hparams.logger = [wblogger]
 
-    hparams.callbacks = make_checkpoint_callbacks(hparams.exp_name)
+    hparams.callbacks = make_callbacks(hparams.exp_name)
     trainer = pl.Trainer.from_argparse_args(hparams)
     trainer.fit(model)
 
@@ -120,7 +120,8 @@ def get_default_argument_parser():
     return parser
 
 
-def make_checkpoint_callbacks(exp_name, base_path="checkpoints", frequency=None):
+def make_callbacks(exp_name, base_path="checkpoints", frequency=None):
+    # Checkpoint callbacks
     base_callback = pl.callbacks.ModelCheckpoint(
         dirpath=f"{base_path}/{exp_name}/checkpoints", save_last=True, verbose=True
     )
@@ -134,6 +135,7 @@ def make_checkpoint_callbacks(exp_name, base_path="checkpoints", frequency=None)
         verbose=True,
     )
 
+    # Earlystop callbacks
     train_earlystop = pl.callbacks.EarlyStopping(
         monitor="train/loss_epoch",
         min_delta=0.001,
@@ -148,6 +150,11 @@ def make_checkpoint_callbacks(exp_name, base_path="checkpoints", frequency=None)
         patience=3,
         verbose=True,
         mode='min',
+    )
+
+    # Monitor callbacks
+    lr_monitor = pl.callbacks.LearningRateMonitor(
+        logging_interval="step"
     )
 
     return [base_callback, val_callback, train_earlystop, val_earlystop]
