@@ -40,8 +40,8 @@ class MeanReciprocalRank(Metric):
         return self.correct.float() / self.total
 
     def forward(self, query: List, gallery: torch.Tensor):
-        rank = 0.0
         for i in range(len(query)):
+            rank = 0.0
             for j in range(gallery.shape[1]):
                 if gallery[i, j] == query[i]:
                     rank = 1 / (j + 1)
@@ -50,8 +50,8 @@ class MeanReciprocalRank(Metric):
             self.total += 1
 
     def update(self, query: List, gallery: torch.Tensor):
-        rank = 0.0
         for i in range(len(query)):
+            rank = 0.0
             for j in range(gallery.shape[1]):
                 if gallery[i, j] == query[i]:
                     rank = 1 / (j + 1)
