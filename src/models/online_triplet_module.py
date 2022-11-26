@@ -1,5 +1,6 @@
 import math
 from argparse import ArgumentParser
+from tqdm import tqdm
 from typing import Any, List
 
 import torch
@@ -22,7 +23,7 @@ class VS_args:
     datapath = "data"
     benchmark = "deepfashion"
     logpath = "logs"
-    nworker = 1
+    nworker = 8
     bsz = 1024
 
 
@@ -176,7 +177,8 @@ class OnlineTripletModule(LightningModule):
         class_ids = {}
         class_count = 0
 
-        for batch_idx, batch in enumerate(gallery_dataloader):
+        Logger.info("Embedding dataset...")
+        for batch_idx, batch in tqdm(enumerate(gallery_dataloader), total=len(gallery_dataloader)):
             imgs, pair_ids, styles = batch
             imgs = torch.stack(imgs, 0).to("cuda")
 

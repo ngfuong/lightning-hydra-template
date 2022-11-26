@@ -113,7 +113,7 @@ class OnlineTripletDataset:
                 )
                 dataloader = DataLoader(
                     dataset,
-                    batch_size=len(dataset),
+                    batch_size=512,
                     shuffle=shuffle,
                     num_workers=nworker,
                     pin_memory=True,
