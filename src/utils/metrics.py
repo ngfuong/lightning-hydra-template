@@ -1,3 +1,5 @@
+from typing import List
+
 import torch
 from torchmetrics import Metric
 
@@ -11,15 +13,17 @@ class TopKAccuracy(Metric):
     def compute(self):
         return self.correct.float() / self.total
 
-    def forward(self, query: int, gallery: torch.Tensor):
-        if query in gallery:
-            self.correct += 1
-        self.total += 1
+    def forward(self, query: List, gallery: torch.Tensor):
+        for i in range(len(query)):
+            if query[i] in gallery[i, :]:
+                self.correct += 1
+            self.total += 1
 
-    def update(self, query: int, gallery: torch.Tensor):
-        if query in gallery:
-            self.correct += 1
-        self.total += 1
+    def update(self, query: List, gallery: torch.Tensor):
+        for i in range(len(query)):
+            if query[i] in gallery[i, :]:
+                self.correct += 1
+            self.total += 1
 
 
 class MeanReciprocalRank(Metric):
@@ -35,22 +39,22 @@ class MeanReciprocalRank(Metric):
     def compute(self):
         return self.correct.float() / self.total
 
-    def forward(self, query: int, gallery: torch.Tensor):
-        rank = 0.0
-        for i in range(len(gallery)):
-            if gallery[i] == query:
-                rank = 1 / (i + 1)
-                break
+    def forward(self, query: List, gallery: torch.Tensor):
+        for i in range(len(query)):
+            rank = 0.0
+            for j in range(gallery.shape[1]):
+                if gallery[i, j] == query[i]:
+                    rank = 1 / (j + 1)
+                    break
+            self.correct += rank
+            self.total += 1
 
-        self.correct += rank
-        self.total += 1
-
-    def update(self, query: int, gallery: torch.Tensor):
-        rank = 0.0
-        for i in range(len(gallery)):
-            if gallery[i] == query:
-                rank = 1 / (i + 1)
-                break
-
-        self.correct += rank
-        self.total += 1
+    def update(self, query: List, gallery: torch.Tensor):
+        for i in range(len(query)):
+            rank = 0.0
+            for j in range(gallery.shape[1]):
+                if gallery[i, j] == query[i]:
+                    rank = 1 / (j + 1)
+                    break
+            self.correct += rank
+            self.total += 1

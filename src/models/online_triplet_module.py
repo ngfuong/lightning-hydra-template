@@ -13,6 +13,7 @@ from torchvision.models import resnet50
 from datamodules.datasets import OnlineTripletDataset
 from utils.logger import Logger
 from utils.metrics import MeanReciprocalRank, TopKAccuracy
+from utils.triplet_semi_hard_loss import TripletSemihardLoss
 
 # import sklearn
 
@@ -73,8 +74,10 @@ class OnlineTripletModule(LightningModule):
             self.criterion = batch_all_triplet_loss
         elif kwargs.get("loss") == "batch_hard":
             self.criterion = batch_hard_triplet_loss
+        elif kwargs.get("loss") == "batch_semi_hard":
+            self.criterion = TripletSemihardLoss
         else:
-            self.criterion = batch_all_triplet_loss
+            self.criterion = TripletSemihardLoss
 
         # Top K Accuracy
         self.top_k = kwargs.get("top_k", 20)
@@ -124,6 +127,10 @@ class OnlineTripletModule(LightningModule):
         elif self.loss_type == "batch_hard":
             loss = self.criterion(
                 labels=ids, embeddings=embeddings, margin=1, squared=True
+            )
+        elif self.loss_type == "batch_semi_hard":
+            loss = self.criterion(
+                targets=ids, embeddings=embeddings, margin=1, squared=True
             )
 
         # update and log metrics
@@ -184,7 +191,7 @@ class OnlineTripletModule(LightningModule):
                 gallery_classes.append(class_ids[label])
 
         gallery_vectors = torch.cat(gallery_vectors, 0)
-        self.knn = NearestNeighbors(n_neighbors=20, n_jobs=-1)
+        self.knn = NearestNeighbors(n_neighbors=20)
         self.knn.fit(gallery_vectors)
 
         self.class_ids = class_ids
@@ -195,14 +202,21 @@ class OnlineTripletModule(LightningModule):
         imgs = torch.stack(imgs, 0).to("cuda")
         embeddings = self(imgs)
 
-        dists, indexes = self.knn.kneighbors(embeddings, self.top_k)
-        label = f"{pair_ids[0]}_{styles[0]}"
-        current_class = self.class_ids[label]
+        # Convert label
+        labels = []
+        assert len(pair_ids) == len(styles)
+        for i in range(len(pair_ids)):
+            label = self.class_ids[f"{pair_ids[i]}_{styles[i]}"]
+            labels.append(label)
+
+        dists, indexes = self.knn.kneighbors(embeddings.to("cpu"), self.top_k)
         top_k_classes = self.gallery_classes[indexes]
+        if len(top_k_classes.shape) == 1:
+            top_k_classes = torch.unsqueeze(top_k_classes, dim=0)
         # calculate top k acc
-        self.top_k_accuracy.update(current_class, top_k_classes)
+        self.top_k_accuracy.update(labels, top_k_classes)
         #  mean reciprocal rank
-        self.mean_reciprocal_rank.update(current_class, top_k_classes)
+        self.mean_reciprocal_rank.update(labels, top_k_classes)
 
         # if self.loss_type == "batch_all":
         #     loss, _ = self.criterion(
