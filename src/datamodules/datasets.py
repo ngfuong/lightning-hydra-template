@@ -1,15 +1,12 @@
-import os
-import random
-
-import pandas as pd
-import torch
 import torchvision.transforms as transform
-from PIL import Image
 from torch.utils.data import DataLoader
 
-from src.utils.utils import collate_fn, random_exclusion
 from src.datamodules.deepfashion import DatasetDeepFashion
-from src.datamodules.onlinetriplets import DeepFashionOnlineTripletBalanceDataset
+from src.datamodules.onlinetriplets import (
+    DeepFashionOnlineTripletBalanceDataset,
+    DeepFashionOnlineValidationDataset,
+)
+from src.utils.utils import collate_fn
 
 
 class VSDataset:
@@ -72,6 +69,7 @@ class OnlineTripletDataset:
     def initialize(cls, img_size, datapath, imagenet_norm=False):
         cls.datasets = {
             "deepfashion": DeepFashionOnlineTripletBalanceDataset,
+            "deepfashion_val": DeepFashionOnlineValidationDataset,
         }
 
         if imagenet_norm:
@@ -86,7 +84,7 @@ class OnlineTripletDataset:
         cls.datapath = datapath
 
     @classmethod
-    def build_dataloader(cls, benchmark, bsz, nworker, split):
+    def build_dataloader(cls, benchmark, bsz, nworker, split, val_type="gallery"):
         nworker = nworker
         shuffle = False
         if split == "train":
@@ -108,16 +106,42 @@ class OnlineTripletDataset:
                 ]
             )
 
-        dataset = cls.datasets[benchmark](
-            cls.datapath, transforms=transforms, split=split
-        )
-        dataloader = DataLoader(
-            dataset,
-            batch_size=bsz,
-            shuffle=shuffle,
-            num_workers=nworker,
-            pin_memory=True,
-            collate_fn=collate_fn,
-        )
+        if split == "val":
+            if val_type == "gallery":
+                dataset = cls.datasets["deepfashion_val"](
+                    cls.datapath, transforms=transforms, split=split, val_type=val_type
+                )
+                dataloader = DataLoader(
+                    dataset,
+                    batch_size=len(dataset),
+                    shuffle=shuffle,
+                    num_workers=nworker,
+                    pin_memory=True,
+                    collate_fn=collate_fn,
+                )
+            else:
+                dataset = cls.datasets["deepfashion_val"](
+                    cls.datapath, transforms=transforms, split=split, val_type=val_type
+                )
+                dataloader = DataLoader(
+                    dataset,
+                    batch_size=1,
+                    shuffle=shuffle,
+                    num_workers=nworker,
+                    pin_memory=True,
+                    collate_fn=collate_fn,
+                )
+        else:
+            dataset = cls.datasets[benchmark](
+                cls.datapath, transforms=transforms, split=split
+            )
+            dataloader = DataLoader(
+                dataset,
+                batch_size=bsz,
+                shuffle=shuffle,
+                num_workers=nworker,
+                pin_memory=True,
+                collate_fn=collate_fn,
+            )
 
         return dataloader

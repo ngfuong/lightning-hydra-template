@@ -6,11 +6,13 @@ import torch
 import torch.nn as nn
 from online_triplet_loss.losses import *
 from pytorch_lightning import LightningModule
+from sklearn.neighbors import NearestNeighbors
 from torchmetrics import MeanMetric, MinMetric
 from torchvision.models import resnet50
 
 from datamodules.datasets import OnlineTripletDataset
 from utils.logger import Logger
+from utils.metrics import MeanReciprocalRank, TopKAccuracy
 
 # import sklearn
 
@@ -74,11 +76,16 @@ class OnlineTripletModule(LightningModule):
         else:
             self.criterion = batch_all_triplet_loss
 
+        # Top K Accuracy
+        self.top_k = kwargs.get("top_k", 20)
+
         # for averaging loss across batches
         self.train_loss = MeanMetric()
         self.val_loss = MeanMetric()
 
         self.val_loss_best = MinMetric()
+        self.top_k_accuracy = TopKAccuracy()
+        self.mean_reciprocal_rank = MeanReciprocalRank()
 
         # TODO: ADD MORE MODEL
         if kwargs["backbone"] in ["resnet50"]:
@@ -130,7 +137,7 @@ class OnlineTripletModule(LightningModule):
                 msg += "[Batch: %06d/%06d] " % (
                     batch_idx + 1,
                     self.len_train_dataloader,
-                    )
+                )
                 msg += "L: %6.5f " % loss
                 msg += "Avg L: %6.5f " % self.train_loss.compute()
                 Logger.info(msg)
@@ -154,57 +161,105 @@ class OnlineTripletModule(LightningModule):
         # Log epoch loss
         self.log("train/loss_epoch", loss)
 
+    def on_validation_start(self):
+        gallery_dataloader = self.val_dataloader("gallery")
+
+        gallery_vectors = []
+        gallery_classes = []
+        class_ids = {}
+        class_count = 0
+
+        for batch_idx, batch in enumerate(gallery_dataloader):
+            imgs, pair_ids, styles = batch
+            imgs = torch.stack(imgs, 0).to("cuda")
+
+            feature_vector = self(imgs)
+            gallery_vectors.append(feature_vector.to("cpu"))
+            # label
+            for i in range(len(pair_ids)):
+                label = f"{pair_ids[i]}_{styles[i]}"
+                if label not in class_ids:
+                    class_ids[f"{pair_ids[i]}_{styles[i]}"] = class_count
+                    class_count += 1
+                gallery_classes.append(class_ids[label])
+
+        gallery_vectors = torch.cat(gallery_vectors, 0)
+        self.knn = NearestNeighbors(n_neighbors=20, n_jobs=-1)
+        self.knn.fit(gallery_vectors)
+
+        self.class_ids = class_ids
+        self.gallery_classes = torch.Tensor(gallery_classes)
 
     def validation_step(self, batch: Any, batch_idx: int):
-        images, ids = batch
+        imgs, pair_ids, styles = batch
+        imgs = torch.stack(imgs, 0).to("cuda")
+        embeddings = self(imgs)
 
-        images = torch.squeeze(torch.cat(images, 0), 0)
-        ids = torch.squeeze(torch.cat(ids, 0), 0)
-        embeddings = self(images)
+        # Convert label
+        labels = []
+        assert len(pair_ids) == len(styles)
+        for i in range(len(pair_ids)):
+            label = self.class_ids[f"{pair_ids[i]}_{styles[i]}"]
+            labels.append(label)
 
-        if self.loss_type == "batch_all":
-            loss, _ = self.criterion(
-                labels=ids, embeddings=embeddings, margin=1, squared=True
-            )
-        elif self.loss_type == "batch_hard":
-            loss = self.criterion(
-                labels=ids, embeddings=embeddings, margin=1, squared=True
-            )
+        dists, indexes = self.knn.kneighbors(embeddings.to("cpu"), self.top_k)
+        top_k_classes = self.gallery_classes[indexes]
+        # calculate top k acc
+        self.top_k_accuracy.update(labels, top_k_classes)
+        #  mean reciprocal rank
+        self.mean_reciprocal_rank.update(labels, top_k_classes)
 
-        # update and log metrics
-        self.log("val/loss", loss, on_step=True, on_epoch=False, prog_bar=True)
-        # self.log("val/acc", self.val_acc, on_step=False, on_epoch=True, prog_bar=True)
-        self.val_loss.update(loss)
-        # self.val_acc(preds, targets)
-        if self.global_rank == 0:
-            if batch_idx % self.write_batch_idx == 0:
-                msg = "[Epoch: %02d] " % self.current_epoch
-                msg += "[Batch: %06d/%06d] " % (batch_idx + 1, self.len_val_dataloader)
-                msg += "L: %6.5f" % loss
-                msg += "Avg L: %6.5f" % self.val_loss.compute()
-                Logger.info(msg)
+        # if self.loss_type == "batch_all":
+        #     loss, _ = self.criterion(
+        #         labels=ids, embeddings=embeddings, margin=1, squared=True
+        #     )
+        # elif self.loss_type == "batch_hard":
+        #     loss = self.criterion(
+        #         labels=ids, embeddings=embeddings, margin=1, squared=True
+        #     )
 
-        return loss
+        # # update and log metrics
+        # self.log("val/loss", loss, on_step=True, on_epoch=False, prog_bar=True)
+        # # self.log("val/acc", self.val_acc, on_step=False, on_epoch=True, prog_bar=True)
+        # self.val_loss.update(loss)
+        # # self.val_acc(preds, targets)
+        # if self.global_rank == 0:
+        #     if batch_idx % self.write_batch_idx == 0:
+        #         msg = "[Epoch: %02d] " % self.current_epoch
+        #         msg += "[Batch: %06d/%06d] " % (batch_idx + 1, self.len_val_dataloader)
+        #         msg += "L: %6.5f" % loss
+        #         msg += "Avg L: %6.5f" % self.val_loss.compute()
+        #         Logger.info(msg)
+
+        # return loss
 
     def validation_epoch_end(self, outputs: List[Any]):
-        if self.global_rank == 0:
-            loss = self.val_loss.compute()  # get epoch val loss
-            msg = "\n*** Validation"
-            msg += "[@Epoch %02d] " % self.current_epoch
-            msg += "Avg L: %6.5f" % loss
-            msg += "***\n"
-            Logger.info(msg)
+        top_k_acc = self.top_k_accuracy.compute()
+        mrr = self.mean_reciprocal_rank.compute()
+        self.log("val/top_k_acc", top_k_acc, on_epoch=True)
+        self.log("val/mean_reciprocal_rank", mrr, on_epoch=True)
+        # if self.global_rank == 0:
+        #     loss = self.val_loss.compute()  # get epoch val loss
+        #     msg = "\n*** Validation"
+        #     msg += "[@Epoch %02d] " % self.current_epoch
+        #     msg += "Avg L: %6.5f" % loss
+        #     msg += "***\n"
+        #     Logger.info(msg)
 
-        self.log("val/loss_epoch", loss, on_epoch=True)
-        self.val_loss_best.update(loss)  # update best so far val loss
-        # log `val_acc_best` as a value through `.compute()` method, instead of as a metric object
-        # otherwise metric would be reset by lightning after each epoch
-        self.log("val/loss_best", self.val_loss_best.compute(), prog_bar=True)
+        # self.log("val/loss_epoch", loss, on_epoch=True)
+        # self.val_loss_best.update(loss)  # update best so far val loss
+        # # log `val_acc_best` as a value through `.compute()` method, instead of as a metric object
+        # # otherwise metric would be reset by lightning after each epoch
+        # self.log("val/loss_best", self.val_loss_best.compute(), prog_bar=True)
 
         if self.global_rank == 0:
             Logger.tbd_writer.add_scalars(
                 "loss",
-                {"train": self.train_loss.compute(), "val": loss},
+                {
+                    "train": self.train_loss.compute(),
+                    "val/top_k_acc": top_k_acc,
+                    "val/mean_reciprocal_rank": mrr,
+                },
                 self.current_epoch,
             )
             Logger.tbd_writer.flush()
@@ -277,12 +332,9 @@ class OnlineTripletModule(LightningModule):
         self.len_train_dataloader = len(dataloader) // torch.cuda.device_count()
         return dataloader
 
-    def val_dataloader(self):
+    def val_dataloader(self, val_type="query"):
         dataloader = OnlineTripletDataset.build_dataloader(
-            self.args.benchmark,
-            self.args.bsz,
-            self.args.nworker,
-            split="val",
+            self.args.benchmark, 1, self.args.nworker, "val", val_type
         )
 
         self.len_val_dataloader = len(dataloader) // torch.cuda.device_count()
