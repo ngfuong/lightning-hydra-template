@@ -13,6 +13,7 @@ from torchvision.models import resnet50
 from datamodules.datasets import OnlineTripletDataset
 from utils.logger import Logger
 from utils.metrics import MeanReciprocalRank, TopKAccuracy
+from utils.triplet_semi_hard_loss import TripletSemihardLoss
 
 # import sklearn
 
@@ -73,8 +74,10 @@ class OnlineTripletModule(LightningModule):
             self.criterion = batch_all_triplet_loss
         elif kwargs.get("loss") == "batch_hard":
             self.criterion = batch_hard_triplet_loss
+        elif kwargs.get("loss") == "batch_semi_hard":
+            self.criterion = TripletSemihardLoss
         else:
-            self.criterion = batch_all_triplet_loss
+            self.criterion = TripletSemihardLoss
 
         # Top K Accuracy
         self.top_k = kwargs.get("top_k", 20)
@@ -124,6 +127,10 @@ class OnlineTripletModule(LightningModule):
         elif self.loss_type == "batch_hard":
             loss = self.criterion(
                 labels=ids, embeddings=embeddings, margin=1, squared=True
+            )
+        elif self.loss_type == "batch_semi_hard":
+            loss = self.criterion(
+                targets=ids, embeddings=embeddings, margin=1, squared=True
             )
 
         # update and log metrics
