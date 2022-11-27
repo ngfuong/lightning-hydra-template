@@ -1,3 +1,7 @@
+# Scripts
+scripts/train_*.sh
+
+
 # Distribution / packaging
 .Python
 build/
