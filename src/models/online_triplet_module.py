@@ -191,7 +191,7 @@ class OnlineTripletModule(LightningModule):
                 gallery_classes.append(class_ids[label])
 
         gallery_vectors = torch.cat(gallery_vectors, 0)
-        self.knn = NearestNeighbors(n_neighbors=20, n_jobs=-1)
+        self.knn = NearestNeighbors(n_neighbors=20)
         self.knn.fit(gallery_vectors)
 
         self.class_ids = class_ids
@@ -211,6 +211,8 @@ class OnlineTripletModule(LightningModule):
 
         dists, indexes = self.knn.kneighbors(embeddings.to("cpu"), self.top_k)
         top_k_classes = self.gallery_classes[indexes]
+        if len(top_k_classes.shape) == 1:
+            top_k_classes = torch.unsqueeze(top_k_classes, dim=0)
         # calculate top k acc
         self.top_k_accuracy.update(labels, top_k_classes)
         #  mean reciprocal rank
