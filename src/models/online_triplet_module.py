@@ -9,12 +9,13 @@ from online_triplet_loss.losses import *
 from pytorch_lightning import LightningModule
 from sklearn.neighbors import NearestNeighbors
 from torchmetrics import MeanMetric, MinMetric
-from torchvision.models import resnet50
+from torchvision.models import resnet50, resnet101
 
 from datamodules.datasets import OnlineTripletDataset
 from utils.logger import Logger
 from utils.metrics import MeanReciprocalRank, TopKAccuracy
 from utils.triplet_semi_hard_loss import TripletSemihardLoss
+from models.components.convnet import ConvNet_VGG16bn
 
 # import sklearn
 
@@ -23,7 +24,7 @@ class VS_args:
     datapath = "data"
     benchmark = "deepfashion"
     logpath = "logs"
-    nworker = 8
+    nworker = 32
     bsz = 1024
 
 
@@ -81,7 +82,7 @@ class OnlineTripletModule(LightningModule):
             self.criterion = TripletSemihardLoss
 
         # Top K Accuracy
-        self.top_k = kwargs.get("top_k", 20)
+        self.top_k = kwargs.get("top_k", 10)
 
         # for averaging loss across batches
         self.train_loss = MeanMetric()
@@ -99,9 +100,20 @@ class OnlineTripletModule(LightningModule):
             self.net = resnet50(pretrained=True)
             num_features = self.net.fc.in_features
             self.net.fc = nn.Linear(num_features, 128)  # 128 = num_classes
+        elif kwargs["backbone"] in ["resnet101"]:
+            OnlineTripletDataset.initialize(
+                img_size=224, datapath=self.args.datapath, imagenet_norm=True
+            )
+            self.net = resnet101(pretrained=True)
+            num_features = self.net.fc.in_features
+            self.net.fc = nn.Linear(num_features, 128)  # 128 = num_classes
+        elif kwargs["backbone"] in ["vgg16", "vgg16_bn"]:
+            OnlineTripletDataset.initialize(
+                img_size=224, datapath=self.args.datapath, imagenet_norm=True
+            )
+            self.net = ConvNet_VGG16bn(num_classes=128) # 128 = num_classes
         else:
-            OnlineTripletDataset.initialize(img_size=224, datapath=self.args.datapath)
-            self.net = None
+            raise ValueError("Model supported are resnet50 and vgg16 only.")
 
         self.best_val_loss = float("-inf")
 
@@ -170,6 +182,9 @@ class OnlineTripletModule(LightningModule):
         self.log("train/loss_epoch", loss)
 
     def on_validation_start(self):
+        # if self.current_epoch == 0:
+        #    return
+
         gallery_dataloader = self.val_dataloader("gallery")
 
         gallery_vectors = []

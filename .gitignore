@@ -80,7 +80,7 @@ configs/local/default.yaml
 logs/
 .env
 .autoenv
-./scripts/train_online*.sh
+./scripts/*.sh
 
 # Data directory
 deepfashion2

@@ -110,7 +110,7 @@ def get_default_argument_parser():
     )
     parser.add_argument(
         '--resume',
-        action="store_false",
+        action="store_true",
         default=False,
         help="resume if have a checkpoint"
     )
