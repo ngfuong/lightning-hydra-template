@@ -276,6 +276,9 @@ class OnlineTripletModule(LightningModule):
                 Logger.tbd_writer.close()
                 Logger.info("=========== Finished Training ===========")
 
+    def on_test_start(self) -> None:
+        return super().on_test_start()
+
     def test_step(self, batch: Any, batch_idx: int):
         """
         images,ids = batch
