@@ -1,7 +1,7 @@
 import torchvision.transforms as transform
 from torch.utils.data import DataLoader
 
-from src.datamodules.deepfashion import DatasetDeepFashion
+from src.datamodules.deepfashion import DatasetDeepFashion, DatasetDeepFashion2
 from src.datamodules.onlinetriplets import (
     DeepFashionOnlineTripletBalanceDataset,
     DeepFashionOnlineValidationDataset,
@@ -14,6 +14,7 @@ class VSDataset:
     def initialize(cls, img_size, datapath, imagenet_norm=False):
         cls.datasets = {
             "deepfashion": DatasetDeepFashion,
+            "deepfashion2": DatasetDeepFashion2,
         }
 
         if imagenet_norm:
@@ -58,7 +59,7 @@ class VSDataset:
             batch_size=bsz,
             shuffle=shuffle,
             num_workers=nworker,
-            pin_memory=True,
+            pin_memory=False,
         )
 
         return dataloader
@@ -116,7 +117,7 @@ class OnlineTripletDataset:
                     batch_size=bsz,
                     shuffle=shuffle,
                     num_workers=nworker,
-                    pin_memory=True,
+                    pin_memory=False,
                     collate_fn=collate_fn,
                 )
             else:
@@ -128,7 +129,7 @@ class OnlineTripletDataset:
                     batch_size=bsz,
                     shuffle=shuffle,
                     num_workers=nworker,
-                    pin_memory=True,
+                    pin_memory=False,
                     collate_fn=collate_fn,
                 )
         else:
@@ -140,7 +141,7 @@ class OnlineTripletDataset:
                 batch_size=bsz,
                 shuffle=shuffle,
                 num_workers=nworker,
-                pin_memory=True,
+                pin_memory=False,
                 collate_fn=collate_fn,
             )
 

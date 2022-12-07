@@ -4,12 +4,12 @@ from PIL import Image
 from torch.utils.data import Dataset
 
 
-class DatasetDeepFashion(Dataset):
+class DatasetDeepFashion2(Dataset):
     def __init__(self, datapath, transforms, split):
-        self.split = "val" if split in ["val", "test"] else "train"
         self.datapath = datapath
         self.img_path = os.path.join(self.datapath, self.split, "image")
         self.transforms = transforms
+        self.split = "val" if split in ["val", "test"] else "train"
         self.img_metadata = self.build_img_metadata()
 
     def __len__(self):
@@ -109,4 +109,64 @@ class DatasetDeepFashion(Dataset):
             "Total (%s) images are: %d" % (self.split, len(img_metadata["image_name"]))
         )
         return img_metadata
+
+
+class DatasetDeepFashion(Dataset):
+    """ Custom dataset with triplet sampling, for the Deep Fashion"""
+
+    def _pil_loader(element):
+        path = element[0]
+        x1,y1,x2,y2 = element[1],element[2],element[3],element[4]
+        img = Image.open(path)
+        crop = img.crop((x1,y1,x2,y2))
+        
+        return crop.convert('RGB')
+
+    def __init__(self, datapath, transforms, split, loader = _pil_loader):
+        """
+        Args:
+            df: Dataframe
+            root_dir (string): Directory with all the images.
+            im_size (tuple): image size 
+            train (boolean): True if create train set, False if test set
+            transform (callable, optional): Optional transform to be applied
+                on a sample.
+            loader: function to load image
+        Return:
+            Dataset
+        """
+        self.split = "val" if split in ["val", "test"] else "train"
+        self.datapath = datapath
+        self.img_path = os.path.join(self.datapath, self.split, "image")
+        self.transform = transforms
+        self.loader = loader
+        self.df = self.load_csv(self.split)
+            
+        self.df['image_name_a'] = self.df['image_pair_name_a'].apply(lambda x: os.path.join(self.datapath, x))
+        self.df['image_name_p'] = self.df['image_pair_name_p'].apply(lambda x: os.path.join(self.datapath, x))
+        self.df['image_name_n'] = self.df['image_pair_name_n'].apply(lambda x: os.path.join(self.datapath, x))
+        
+    def _sample(self,idx):
+        p1 = self.df.loc[idx, ['image_name_a','x_1_a','y_1_a','x_2_a','y_2_a']].values.tolist()
+        p2 = self.df.loc[idx, ['image_name_p','x_1_p','y_1_p','x_2_p','y_2_p']].values.tolist()
+        p3 = self.df.loc[idx, ['image_name_n','x_1_n','y_1_n','x_2_n','y_2_n']].values.tolist()
+
+        return [p1, p2, p3]
+
+    def __len__(self):
+        return len(self.df)
+
+    def __getitem__(self, idx):
+        paths = self._sample(idx)
+        images = []
+        for i in paths:
+            temp = self.loader(i)
+            temp = self.transform(temp)
+            images.append(temp)
+        return (images[0], images[1], images[2]),0
+
+    def load_csv(self, split):
+        with open(os.path.join(self.datapath, split + "_triplets.csv"), "r") as f:
+            df = pd.read_csv(f)
+            return df
 

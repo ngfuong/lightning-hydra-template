@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 
 import pytorch_lightning as pl
 
-from src.models.online_triplet_module import OnlineTripletModule
+from src.models.vs_module import VisualSearchModule 
 
 
 def do_training(hparams, model_constructor):
@@ -84,7 +84,7 @@ def get_default_argument_parser():
     parser.add_argument(
         "--max_epochs",
         type=int,
-        default=30,
+        default=10,
     )
 
     parser.add_argument(
@@ -99,17 +99,10 @@ def get_default_argument_parser():
         default=False,
         help="resume if have a checkpoint",
     )
-    parser.add_argument(
-        "--loss",
-        type=str,
-        default="batch_hard",
-        help="online triplet loss type",
-    )
-
     return parser
 
 
-def make_callbacks(exp_name, base_path="checkpoints", frequency=None):
+def make_callbacks(exp_name, base_path="/cm/archive/phuongln6/visual-search-ckpt", frequency=None):
     # Checkpoint callbacks
     base_callback = pl.callbacks.ModelCheckpoint(
         dirpath=f"{base_path}/{exp_name}/checkpoints", 
@@ -118,10 +111,10 @@ def make_callbacks(exp_name, base_path="checkpoints", frequency=None):
     )
 
     val_callback = pl.callbacks.ModelCheckpoint(
-        monitor="val/top_k_acc",
+        monitor="val/loss_epoch",
         dirpath=f"{base_path}/{exp_name}/checkpoints/",
-        filename="result-{epoch}-{val/top_k_acc:.3f}",
-        mode="max",
+        filename="result-{epoch}-{val/loss_epoch:.4f}",
+        mode="min",
         save_top_k=-1,  # save all checkpoints
         verbose=True,
     )
@@ -129,18 +122,18 @@ def make_callbacks(exp_name, base_path="checkpoints", frequency=None):
     # Earlystop callbacks
     train_earlystop = pl.callbacks.EarlyStopping(
         monitor="train/loss_epoch",
-        min_delta=0.001,
+        min_delta=0.005,
         patience=3,
         verbose=True,
         mode='min',
     )
 
     val_earlystop = pl.callbacks.EarlyStopping(
-        monitor="val/top_k_acc",
-        min_delta=0.005,
+        monitor="val/loss_epoch",
+        min_delta=0.001,
         patience=3,
         verbose=True,
-        mode='max',
+        mode='min',
     )
 
     # Monitor callbacks
@@ -185,7 +178,7 @@ def get_latest_checkpoint(exp_name):
 
 
 if __name__ == "__main__":
-    parser = OnlineTripletModule.add_model_specific_args(get_default_argument_parser())
+    parser = VisualSearchModule.add_model_specific_args(get_default_argument_parser())
     hparams = parser.parse_args()
     print(hparams)
-    do_training(hparams, OnlineTripletModule)
+    do_training(hparams, VisualSearchModule)

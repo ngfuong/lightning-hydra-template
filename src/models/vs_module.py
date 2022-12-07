@@ -4,20 +4,23 @@ from argparse import ArgumentParser
 
 import torch
 import torch.nn as nn
-from torchvision.models import resnet50
 from pytorch_lightning import LightningModule
+from sklearn.neighbors import NearestNeighbors
 from torchmetrics import MinMetric, MeanMetric
-
-# import sklearn
-
-from utils.logger import Logger
+from torchvision.models import resnet50, resnet101
 from datamodules.datasets import VSDataset
+from utils.logger import Logger
+from utils.metrics import MeanReciprocalRank, TopKAccuracy
+from torch.nn import TripletMarginLoss
+from models.components.convnet import ConvNet_VGG16bn
+
+
 
 class VS_args:
-    datapath = 'data/deepfashion2'
+    datapath = '/cm/archive/phuongln6/data/deepfashion/'
     benchmark = "deepfashion"
-    logpath = 'logs'
-    nworker = 1
+    logpath = "logs"
+    nworker = 16
     bsz = 16
 
 
@@ -52,7 +55,7 @@ class VisualSearchModule(LightningModule):
         self.save_hyperparameters(logger=False, ignore=['kwargs'])
 
         # self.benchmark = dataset
-        self.batch_size = batch_size    # base_batch_size = 16
+        self.batch_size = batch_size  # base_batch_size = 16
         self.base_lr = base_lr * math.sqrt(self.batch_size / 16)
         self.epochs = max_epochs
         
@@ -63,25 +66,44 @@ class VisualSearchModule(LightningModule):
         self.other_kwargs = kwargs
         self.write_batch_idx = 1000 * 16 / self.batch_size
 
-        self.criterion = torch.nn.TripletMarginLoss(margin=1.0, p=2)
+        # define loss
+        self.criterion = TripletMarginLoss(margin=1.0, p=2)
+
+        # Top K Accuracy
+        self.top_k = kwargs.get("top_k", 10)
 
         # for averaging loss across batches
         self.train_loss = MeanMetric()
         self.val_loss = MeanMetric()
 
-        self.val_loss_best = MinMetric()
+        # self.val_loss_best = MinMetric()
+        self.top_k_accuracy = TopKAccuracy()
+        self.mean_reciprocal_rank = MeanReciprocalRank()
 
         # TODO: ADD MORE MODEL
-        if kwargs['backbone'] in ["resnet50"]:
-            VSDataset.initialize(img_size=224, datapath=self.args.datapath,imagenet_norm=True)
+        if kwargs["backbone"] in ["resnet50"]:
+            VSDataset.initialize(
+                img_size=224, datapath=self.args.datapath,imagenet_norm=True
+                )
             self.net = resnet50(pretrained=True)
             num_features = self.net.fc.in_features
-            self.net.fc = nn.Linear(num_features, 128) # 128 = num_classes
+            self.net.fc = nn.Linear(num_features, 128)  # 128 = num_classes
+        elif kwargs["backbone"] in ["resnet101"]:
+            VSDataset.initialize(
+                img_size=224, datapath=self.args.datapath, imagenet_norm=True
+            )
+            self.net = resnet101(pretrained=True)
+            num_features = self.net.fc.in_features
+            self.net.fc = nn.Linear(num_features, 128)  # 128 = num_classes
+        elif kwargs["backbone"] in ["vgg16", "vgg16_bn"]:
+            VSDataset.initialize(
+                img_size=224, datapath=self.args.datapath, imagenet_norm=True
+            )
+            self.net = ConvNet_VGG16bn(num_classes=128) # 128 = num_classes
         else:
-            VSDataset.initialize(img_size=224, datapath=self.args.datapath)
-            self.net = None
+            raise ValueError("Model supported are resnet50 and vgg16 only.")
         
-        self.best_val_loss = float('-inf')
+        # self.best_val_loss = float("-inf")
 
         Logger.initialize(self.args, training=True)
 
@@ -92,8 +114,6 @@ class VisualSearchModule(LightningModule):
         return VS_args()
 
     def training_step(self, batch: Any, batch_idx: int):
-        # loss, preds, targets = self.step(batch)
-
         images, ids = batch
 
         a, p, n = [self(x) for x in images]
@@ -106,13 +126,13 @@ class VisualSearchModule(LightningModule):
         # self.train_acc(preds, targets)
         if self.global_rank == 0:
             if batch_idx % self.write_batch_idx == 0: 
-                msg = '[Epoch: %02d] ' % self.current_epoch
-                msg += '[Batch: %06d/%06d] ' % (
-                    batch_idx+1, 
+                msg = "[Epoch: %02d] " % self.current_epoch
+                msg += "[Batch: %06d/%06d] " % (
+                    batch_idx + 1, 
                     self.len_train_dataloader,
                     )
-                msg += 'L: %6.5f ' % loss
-                msg += 'Avg L: %6.5f ' % self.train_loss.compute()
+                msg += "L: %6.5f " % loss
+                msg += "Avg L: %6.5f " % self.train_loss.compute()
                 Logger.info(msg)
 
         # we can return here dict with any tensors
@@ -120,20 +140,19 @@ class VisualSearchModule(LightningModule):
         # remember to always return loss from `training_step()` or backpropagation will fail!
         # return {"loss": loss, "preds": preds, "targets": targets}
         return loss
-        # return {"loss": loss}
 
     def training_epoch_end(self, outputs: List[Any]):
         # `outputs` is a list of dicts returned from `training_step()`
         if self.global_rank == 0:
             loss = self.train_loss.compute()
-            msg = '\n*** Train '
-            msg += '[@Epoch %02d] ' % self.current_epoch
-            msg += 'Avg L: %6.5f' % loss
-            msg += '***\n'
+            msg = "\n*** Train "
+            msg += "[@Epoch %02d] " % self.current_epoch
+            msg += "Avg L: %6.5f" % loss
+            msg += "***\n"
             Logger.info(msg)
         
         # Log epoch loss
-        self.log('train/loss_epoch', loss)
+        self.log("train/loss_epoch", loss)
 
 
     def validation_step(self, batch: Any, batch_idx: int):
@@ -149,10 +168,10 @@ class VisualSearchModule(LightningModule):
         # self.val_acc(preds, targets)
         if self.global_rank == 0:
             if batch_idx % self.write_batch_idx == 0: 
-                msg = '[Epoch: %02d] ' % self.current_epoch
-                msg += '[Batch: %06d/%06d] ' % (batch_idx+1, self.len_val_dataloader)
-                msg += 'L: %6.5f' % loss
-                msg += 'Avg L: %6.5f' % self.val_loss.compute()
+                msg = "[Epoch: %02d] " % self.current_epoch
+                msg += "[Batch: %06d/%06d] " % (batch_idx+1, self.len_val_dataloader)
+                msg += "L: %6.5f" % loss
+                msg += "Avg L: %6.5f" % self.val_loss.compute()
                 Logger.info(msg)
 
         return loss
@@ -160,22 +179,25 @@ class VisualSearchModule(LightningModule):
     def validation_epoch_end(self, outputs: List[Any]):
         if self.global_rank == 0:
             loss = self.val_loss.compute()  # get epoch val loss
-            msg = '\n*** Validation'
-            msg += '[@Epoch %02d] ' % self.current_epoch
-            msg += 'Avg L: %6.5f' % loss
-            msg += '***\n'
+            msg = "\n*** Validation"
+            msg += "[@Epoch %02d] " % self.current_epoch
+            msg += "Avg L: %6.5f" % loss
+            msg += "***\n"
             Logger.info(msg)
 
         self.log("val/loss_epoch", loss, on_epoch=True)
-        self.val_loss_best.update(loss)  # update best so far val loss
+        # self.val_loss_best.update(loss)  # update best so far val loss
         # log `val_acc_best` as a value through `.compute()` method, instead of as a metric object
         # otherwise metric would be reset by lightning after each epoch
-        self.log("val/loss_best", self.val_loss_best.compute(), prog_bar=True)
+        # self.log("val/loss_best", self.val_loss_best.compute(), prog_bar=True)
 
         if self.global_rank==0:
             Logger.tbd_writer.add_scalars(
-                'loss', 
-                {'train': self.train_loss.compute(), 'val': loss}, 
+                "loss", 
+                {
+                    "train": self.train_loss.compute(), 
+                    "val": loss,
+                }, 
                 self.current_epoch,
                 )
             Logger.tbd_writer.flush()
@@ -219,12 +241,12 @@ class VisualSearchModule(LightningModule):
         optimizer = torch.optim.SGD(
             params_list,
             lr=self.base_lr,
-            momentum=self.other_kwargs['weight_decay'],
-            weight_decay=self.other_kwargs['weight_decay']
+            momentum=self.other_kwargs["weight_decay"],
+            weight_decay=self.other_kwargs["weight_decay"],
         )
     
         scheduler = torch.optim.lr_scheduler.LambdaLR(
-            optimizer, lambda x: pow(1.0 -x / self.epochs, 0.9)
+            optimizer, lambda x: pow(1.0 - x / self.epochs, 0.9)
         )
 
         return {
@@ -242,10 +264,10 @@ class VisualSearchModule(LightningModule):
             self.args.benchmark,
             self.args.bsz,
             self.args.nworker,
-            split='train',
+            split="train",
         )
         
-        self.len_train_dataloader = len(dataloader)//torch.cuda.device_count()
+        self.len_train_dataloader = len(dataloader) // torch.cuda.device_count()
         return dataloader
 
     def val_dataloader(self):
@@ -256,7 +278,7 @@ class VisualSearchModule(LightningModule):
             split='val',
         )
         
-        self.len_val_dataloader = len(dataloader)//torch.cuda.device_count()
+        self.len_val_dataloader = len(dataloader) // torch.cuda.device_count()
         return dataloader
 
     @staticmethod
@@ -265,49 +287,40 @@ class VisualSearchModule(LightningModule):
         parser.add_argument(
             "--datapath",
             type=str,
-            default='data/deepfashion2',
-            help='path of datasets'
+            default="data/deepfashion",
+            help="path of datasets"
         )
 
         parser.add_argument(
             "--dataset",
             type=str,
-            default='deepfashion',
-            choices=['deepfashion']
+            default="deepfashion",
+            choices=["deepfashion", "deepfashion2"]
         )
 
         parser.add_argument(
-            '--batch_size',
+            "--batch_size",
             type=int,
             default=16
         )
 
         parser.add_argument(
-            '--base_lr',
+            "--base_lr",
             type=float,
             default=1e-3
         )
 
         parser.add_argument(
-            '--weight_decay',
+            "--weight_decay",
             type=float,
             default=1e-4
         )
         
         parser.add_argument(
-            '--momentum',
+            "--momentum",
             type=float,
             default=0.9
         )
 
         return parser
     
-
-if __name__ == "__main__":
-    import hydra
-    import omegaconf
-    import pyrootutils
-
-    root = pyrootutils.setup_root(__file__, pythonpath=True)
-    cfg = omegaconf.OmegaConf.load(root / "configs" / "model" / "mnist.yaml")
-    _ = hydra.utils.instantiate(cfg)

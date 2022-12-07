@@ -88,7 +88,7 @@ class OnlineTripletModule(LightningModule):
         self.train_loss = MeanMetric()
         self.val_loss = MeanMetric()
 
-        self.val_loss_best = MinMetric()
+        # self.val_loss_best = MinMetric()
         self.top_k_accuracy = TopKAccuracy()
         self.mean_reciprocal_rank = MeanReciprocalRank()
 
@@ -115,7 +115,7 @@ class OnlineTripletModule(LightningModule):
         else:
             raise ValueError("Model supported are resnet50 and vgg16 only.")
 
-        self.best_val_loss = float("-inf")
+        # self.best_val_loss = float("-inf")
 
         Logger.initialize(self.args, training=True)
 
@@ -360,7 +360,11 @@ class OnlineTripletModule(LightningModule):
 
     def val_dataloader(self, val_type="query"):
         dataloader = OnlineTripletDataset.build_dataloader(
-            self.args.benchmark, 1, self.args.nworker, "val", val_type
+            self.args.benchmark, 
+            1, 
+            self.args.nworker, 
+            "val", 
+            val_type
         )
 
         self.len_val_dataloader = len(dataloader) // torch.cuda.device_count()
@@ -370,29 +374,41 @@ class OnlineTripletModule(LightningModule):
     def add_model_specific_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
         parser.add_argument(
-            "--datapath", type=str, default="data", help="path of datasets"
+            "--datapath", 
+            type=str, 
+            default="data", 
+            help="path of datasets"
         )
 
         parser.add_argument(
-            "--dataset", type=str, default="deepfashion", choices=["deepfashion"]
+            "--dataset", 
+            type=str, 
+            default="deepfashion2",
+            choices=["deepfashion", "deepfashion2"]
         )
 
-        parser.add_argument("--batch_size", type=int, default=16)
+        parser.add_argument(
+            "--batch_size", 
+            type=int, 
+            default=16
+            )
 
-        parser.add_argument("--base_lr", type=float, default=1e-3)
+        parser.add_argument(
+            "--base_lr", 
+            type=float, 
+            default=1e-3
+            )
 
-        parser.add_argument("--weight_decay", type=float, default=1e-4)
+        parser.add_argument(
+            "--weight_decay", 
+            type=float, 
+            default=1e-4
+            )
 
-        parser.add_argument("--momentum", type=float, default=0.9)
+        parser.add_argument(
+            "--momentum", 
+            type=float, 
+            default=0.9
+            )
 
         return parser
-
-
-if __name__ == "__main__":
-    import hydra
-    import omegaconf
-    import pyrootutils
-
-    root = pyrootutils.setup_root(__file__, pythonpath=True)
-    cfg = omegaconf.OmegaConf.load(root / "configs" / "model" / "mnist.yaml")
-    _ = hydra.utils.instantiate(cfg)
