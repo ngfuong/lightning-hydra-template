@@ -1,6 +1,32 @@
 # Scripts
 scripts/train_*.sh
+scripts/test_*.sh
 
+# Lightning-Hydra-Template
+# exclude test units
+tests/
+notebooks/
+configs/local/default.yaml
+.env
+.autoenv
+
+# Environments
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+vs/
+
+# Data & Models & Logs
+*.h5
+*.ckpt
+*.tar
+*.tar.gz
+checkpoints/
+data/
+logs/
 
 # Distribution / packaging
 .Python
@@ -47,15 +73,6 @@ ipython_config.py
 __pypackages__/
 __pycache__/
 
-# Environments
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-vs/
-
 ### VisualStudioCode
 .vscode/*
 !.vscode/settings.json
@@ -67,20 +84,3 @@ vs/
 
 # JetBrains
 .idea/
-
-# Data & Models
-*.h5
-*.tar
-*.tar.gz
-checkpoints/
-data/
-
-# Lightning-Hydra-Template
-configs/local/default.yaml
-logs/
-.env
-.autoenv
-./scripts/*.sh
-
-# Data directory
-deepfashion2
