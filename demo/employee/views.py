@@ -15,9 +15,9 @@ def image_request(request):
             img_object = form.instance
             model.predict(img_object.image.url)
 
-            read_image = "query.jpg"
+            read_image = "media/images/query.jpg"
             return render(
-                request, "image.form.html", {"form": form, "img_obj": read_image}
+                request, "image.form.html", {"form": form, "query_img": img_object.image.url ,"img_obj": read_image}
             )
     else:
         form = UserImage()

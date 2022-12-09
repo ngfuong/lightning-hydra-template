@@ -1,15 +1,33 @@
  
 {% block content %}  
-    <form method="post" enctype="multipart/form-data">  
-        {% csrf_token %}  
-        {{ form.as_p }}  
-        <button type="submit">Upload</button>  
-    </form>  
+<div style="
+  text-align: center;
+display: center;
+margin-left: auto;
+margin-right: auto;">
+<form method="post" enctype="multipart/form-data">  
+    {% csrf_token %}  
+    {{ form.as_p }}  
+    <button type="submit">Upload</button>  
+</form>
+</div>
+      
   
     {% if img_obj %}  
-        <h3>Succesfully uploaded</h3>   
-        <!-- : {{img_obj.caption}} -->
-        <img src="{{ img_obj}}" alt="connect" style="max-height:300px">  
+        <div></div>
+        <h1 style="text-align: center;">Query Image</h1>
+        <img src="{{ query_img}}" alt="connect" style="display: block;
+        margin-left: auto;
+        margin-right: auto;
+        width: 500px;
+        height: auto">   
+
+        <h1 style="text-align: center;">Gallery Images</h1>
+        <img src="{{ img_obj}}" alt="connect" style="display: block;
+        margin-left: auto;
+        margin-right: auto;
+        width: 1500px;
+        height: auto">  
     {% endif %}  
   
 {% endblock content %}  

@@ -7,9 +7,9 @@ import torch.nn as nn
 import torchvision
 from PIL import Image
 from sklearn.neighbors import NearestNeighbors
+import os
 
-
-def visualize(indexes, dataframe, labels, dir, cols=5, save=False):
+def visualize(indexes, dataframe, dir, cols=2, save=False):
     """
     Use to plot images
     Args:
@@ -23,17 +23,18 @@ def visualize(indexes, dataframe, labels, dir, cols=5, save=False):
     """
     rows = len(indexes) // cols + 1
     for i in range(len(indexes)):
-        image_name = dir + "/" + dataframe.loc[indexes[i], "image_name"]
-        im = cv2.imread(image_name)
+        image_name = dataframe.loc[indexes[i], 'gallery_image_id']
+        path = os.path.join(dir ,f"{image_name:06d}.jpg")
+        im = cv2.imread(path)
         im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
         plt.subplot(rows, cols, i + 1)
         plt.axis("off")
         plt.imshow(im)
-        plt.title(labels[indexes[i]])
+        # plt.title(indexes[i])
         # plt.tight_layout()
 
     if save:
-        plt.savefig("query.jpg")
+        plt.savefig("media/images/query.jpg",dpi = 500)
 
 
 def forward(x, model, device):
@@ -77,7 +78,7 @@ def get_embed_model(num_classes, name="resnet"):
     """
     model = None
     if name == "resnet":
-        model = torchvision.models.resnet50(pretrained=True)
+        model = torchvision.models.resnet101(pretrained=True)
         num_features = model.fc.in_features
         model.fc = nn.Linear(num_features, num_classes)
     return model
@@ -129,18 +130,20 @@ def get_transform_embed(im_size, train=False):
 
 class Predictor:
     def __init__(self) -> None:
-        df = pd.read_csv("data/shopping100k_similar.csv")
         # Create the category column
-        self.labels = create_label_shopping100k(df)
+        with open(
+                os.path.join(f"val_gallery.json"),
+                encoding="utf-8-sig",
+            ) as f_input:
+            self.df = pd.read_json(f_input)
 
         self.transforms = get_transform_embed((224, 224))
 
-        self.emb_data = np.load("data_embeddings.npy")
+        self.emb_data = np.load("data_embedding.npy")
         print(self.emb_data.shape)
 
         # Device configuration
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
         # KNN model
         self.nn_model = kNN_model(self.emb_data, 30)
 
@@ -148,26 +151,26 @@ class Predictor:
         # Turn model to evaluation mode
         self.emb_model = get_embed_model(128)
         self.emb_model = self.emb_model.to(self.device)
-        state_dict = torch.load("checkpoints/")["state_dict"]
+        state_dict = torch.load("checkpoints/checkpoint.ckpt")["state_dict"]
 
         new_state_dict = state_dict.copy()
 
         for old_key, value in state_dict.items():
             new_state_dict[old_key.replace("net.", "")] = value
-        del new_state_dict[old_key]
-        print(new_state_dict.keys())
+            del new_state_dict[old_key]
+
         self.emb_model.load_state_dict(new_state_dict)
         self.emb_model.eval()
 
     def predict(self, img_path):
         with torch.no_grad():
-            image = pil_loader(img_path)
+            image = pil_loader(img_path[1:])
 
             # Embedding Resize and convert to tensor
             im = self.transforms(image)
             im = torch.unsqueeze(im, 0)
             # Embedding
             emb = forward(im, self.emb_model, self.device).cpu().numpy()
-            dist, idx = self.nn_model.kneighbors(emb, 10)
+            dist, idx = self.nn_model.kneighbors(emb, 5)
         # Visualize images
-        visualize(idx[0], self.df, self.labels, "data/Images", cols=5, save=True)
+        visualize(idx[0], self.df, "validation/image", cols=5, save=True)
