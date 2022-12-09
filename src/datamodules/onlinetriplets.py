@@ -1,3 +1,4 @@
+import copy
 import os
 import random
 
@@ -145,12 +146,10 @@ class DeepFashionOnlineTripletBalanceDataset(Dataset):
 
     def read_image(self, image_name, box=None):
         r"""Return RGB image in PIL Image"""
-        temp = Image.open(os.path.join(self.img_path, image_name))
-        image = temp.copy()
+        image = copy.deepcopy(Image.open(os.path.join(self.img_path, image_name)))
         if box is not None:
             image = image.crop(box)
 
-        temp.close()
         return image.convert("RGB")
 
     def sample(self, idx):
