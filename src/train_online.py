@@ -18,15 +18,18 @@ def do_training(hparams, model_constructor):
     hparams.benchmark = True
 
     if hparams.resume:
-        hparams = set_resume_parameters(hparams)
+        hparams, latest = set_resume_parameters(hparams)
 
     # Loggers
     wblogger = get_wandb_logger(hparams)
     hparams.logger = [wblogger]
 
-    hparams.callbacks = make_checkpoint_callbacks(hparams.exp_name)
+    hparams.callbacks = make_callbacks(hparams.exp_name)
     trainer = pl.Trainer.from_argparse_args(hparams)
-    trainer.fit(model)
+    if hparams.resume:
+        trainer.fit(model, ckpt_path=latest)
+    else:
+        trainer.fit(model)
 
 
 # TODO: write this
@@ -95,7 +98,7 @@ def get_default_argument_parser():
     parser.add_argument(
         "--max_epochs",
         type=int,
-        default=20,
+        default=30,
     )
 
     parser.add_argument(
@@ -106,7 +109,7 @@ def get_default_argument_parser():
     )
     parser.add_argument(
         "--resume",
-        action="store_false",
+        action="store_true",
         default=False,
         help="resume if have a checkpoint",
     )
@@ -120,20 +123,22 @@ def get_default_argument_parser():
     return parser
 
 
-def make_checkpoint_callbacks(exp_name, base_path="checkpoints", frequency=None):
+def make_callbacks(exp_name, base_path="checkpoints", frequency=None):
+    # Checkpoint callbacks
     base_callback = pl.callbacks.ModelCheckpoint(
         dirpath=f"{base_path}/{exp_name}/checkpoints", save_last=True, verbose=True
     )
 
     val_callback = pl.callbacks.ModelCheckpoint(
-        monitor="val/loss_epoch",
+        monitor="val/top_k_acc",
         dirpath=f"{base_path}/{exp_name}/checkpoints/",
-        filename="result-{epoch}-{val_loss_epoch:.2f}",
+        filename="result-{epoch}-{val/top_k_acc:.3f}",
         mode="min",
         save_top_k=-1,  # save all checkpoints
         verbose=True,
     )
 
+    # Earlystop callbacks
     train_earlystop = pl.callbacks.EarlyStopping(
         monitor="train/loss_epoch",
         min_delta=0.001,
@@ -143,27 +148,36 @@ def make_checkpoint_callbacks(exp_name, base_path="checkpoints", frequency=None)
     )
 
     val_earlystop = pl.callbacks.EarlyStopping(
-        monitor="val/loss_epoch",
+        monitor="val/top_k_acc",
         min_delta=0.005,
         patience=3,
         verbose=True,
         mode='min',
     )
 
-    return [base_callback, val_callback, train_earlystop, val_earlystop]
+    # Monitor callbacks
+    lr_monitor = pl.callbacks.LearningRateMonitor(
+        logging_interval="step"
+    )
+
+    return [base_callback, 
+            val_callback, 
+            train_earlystop,
+            # val_earlystop,
+            lr_monitor,
+            ]
 
 
 def set_resume_parameters(hparams):
     latest = get_latest_checkpoint(hparams.exp_name)
     print(f"Resume checkpoint {latest}")
-    hparams.resume_from_checkpoint = latest
 
     wandb_file = "checkpoints/{hparams.exp_name}/wandb_id"
     if os.path.exists(wandb_file):
         with open(wandb_file, "r") as f:
             hparams.wandb_id = f.read()
 
-    return hparams
+    return hparams, latest
 
 
 def get_latest_checkpoint(exp_name):

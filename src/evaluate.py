@@ -1,128 +1,80 @@
 import os
-import sys
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-import argparse
-
-import numpy as np
-import pandas as pd
-
-##################################################
-import torch
-from torch.autograd import Variable
-
-from utils.data_utils import Shopping100k
-from utils.model_utils import get_embed_model
-from utils.search_utils import *
-
-# Define variables
-BATCH_SIZE = 256
-
-parser = argparse.ArgumentParser()
-# Path to the dataframe contains image paths, labels,...
-parser.add_argument(
-    "--df_path",
-    default="data\Shopping100k\Attributes\shopping100k.csv",
-    help="Dataframe contains the deep fashion dataset",
-)
-# Directory to the image dir
-parser.add_argument(
-    "--img_dir", default="data\Shopping100k\Images", help="Root dir to the image dir"
-)
-# Path to the embedding model state dict
-parser.add_argument(
-    "--emb",
-    default="fashion-visual-search\src\pytorch\models\embedding_model\multinet_VGG16bn\multi_net_ckpt11.pt",
-    help="Path to the embedding model state dict",
-)
-# Output path of enbedding
-parser.add_argument(
-    "--save_dir",
-    default="data\model_inference\shopping100k\Multinet\ckpt11",
-    help="Path to save file embedding",
-)
-
-
-def main():
-    # parse the variables
-    args = parser.parse_args()
-    """
-    1. Read csv
-    2. Load dataset
-    3. Feed into DataLoader
-    """
-    df = pd.read_csv(args.df_path)
-    eval_dataset = Shopping100k(df, im_size=(224, 224), root_dir=args.img_dir)
-    evalloader = torch.utils.data.DataLoader(
-        eval_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4
-    )
-
-    # Device configuration
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # Create the embedding model and load checkpoint
-    emb_model = get_embed_model(2000)
-    emb_model = emb_model.to(device)
-    emb_model.load_state_dict(torch.load(args.emb))
-    emb_model.eval()
-
-    """
-    1. Move batch to cuda
-    2. Run through model
-    3. concat to embedding matrix
-    4. Save embedding matrix to file
-    """
-    embedding = torch.randn(1, 2000).type("torch.FloatTensor").to(device)
-    with torch.no_grad():
-        for batch_idx, (eval_image, _) in enumerate(evalloader):
-            eval_image = Variable(eval_image).cuda()
-            emb = emb_model(eval_image)
-            embedding = torch.cat((embedding, emb), 0)
-
-    embedding = np.delete(embedding.cpu().numpy(), np.s_[:1], axis=0)
-    np.save(args.save_dir + "/data_embeddings", embedding)
-
-
-if __name__ == "__main__":
-    main()
-
-
-# KNN
-import os
-import sys
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+# sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 ######################################################################
 import argparse
-
-import numpy as np
 import pandas as pd
+import numpy as np
+from tqdm import tqdm
+from sklearn.neighbors import NearestNeighbors
 
-from utils.search_utils import kNN_model
+import torch
+import torchvision
+import torch.nn as nn
+from src.utils.metrics import TopKAccuracy, MeanReciprocalRank
+from src.datamodules.datasets import OnlineTripletDataset
+from src.models.online_triplet_module import OnlineTripletModule
+from src.models.components.convnet import ConvNet_VGG16bn
+#--------------------------------------------------------------------#
 
-# --------------------------------------------------------------------#
-
-# Argparse
+# Argparse 
 parser = argparse.ArgumentParser()
-# Path to the dataframe contains image paths, labels,...
-parser.add_argument(
-    "--save_path",
-    default="data\\model_inference\\shopping100k\\resnet50_1000\\ckpt5",
-    help="path to the save file",
-)
-# Path to the data embeddings
-parser.add_argument(
-    "--emb_path",
-    default="data\\model_inference\\shopping100k\\resnet50_1000\\ckpt5\\data_embeddings_ckpt5.npy",
-    help="Path to the embedding dataset",
-)
+parser.add_argument("--weights",
+                    required=True,
+                    type=str)
+parser.add_argument('--backbone',
+                    default="resnet50")
+parser.add_argument('--base_lr',
+                    default="1e-3")
+parser.add_argument('--batch_size',
+                    default=16,
+                    type=int)
+parser.add_argument('--max_epochs',
+                    default=30,
+                    type=int)
+parser.add_argument('--data_path',
+                    default="data/")
 # Top K nearest embedding (+1 for the query image)
-parser.add_argument(
-    "--top",
-    default=71,
-    type=int,
-    help="Top K nearest embedding (+1 for the query image)",
-)
+parser.add_argument('--top_k', 
+                    default=10,
+                    type=int,
+                    help='Top K nearest embedding (+1 for the query image)')                    
+                    
+def kNN_model(X, k):
+    """
+    Function to train an NearestNeighbors model, use to improve the speed of retrieving image from embedding database
+    Args:
+        X: data to train has shape MxN
+        k: number of max nearest neighbors want to search
+    
+    Return:
+        Nearest Neigbors model
+    """
+    nn_model = NearestNeighbors(n_neighbors=k)
+    nn_model.fit(X)
+    return nn_model
+
+def get_embed_model(num_classes, name):
+    """
+    Function use to create embedding model
+    Args:
+        num_classes: output dim
+        name: 'resnet' or 'vgg16bn' type of model
+    Return:
+        Embedding model
+    """
+    model = None
+    if name == 'resnet50':
+        model =  torchvision.models.resnet50(pretrained=True)
+        num_features = model.fc.in_features
+        model.fc = nn.Linear(num_features,num_classes)
+    elif name == 'resnet101':
+        model =  torchvision.models.resnet101(pretrained=True)
+        num_features = model.fc.in_features
+        model.fc = nn.Linear(num_features,num_classes)
+    elif name == 'vgg16bn':
+        model =  ConvNet_VGG16bn(num_classes)
+    return model
 
 
 def main():
@@ -136,45 +88,108 @@ def main():
     4. Find whether similar attribute image is in the query or not
     5. Save the evaluate
     """
-    similar_attr = open("data\Shopping100k\shorter_sim_attr.txt", "r")
-    lines = similar_attr.readlines()
-    print(len(lines))
 
-    emb_data = np.load(args.emb_path)
-    print(emb_data.shape)
+    module_def = OnlineTripletModule
 
-    nn_model = kNN_model(emb_data, args.top)
-
-    evaluate = []
-    for line in lines:
-        similar_list = line.split()
-        similar_list = [int(i) for i in similar_list]
-        dists, indexes = nn_model.kneighbors(
-            emb_data[similar_list[0], :].reshape(1, -1), args.top
-        )
-        arr = np.isin(np.asarray(indexes[0]), np.asarray(similar_list)).tolist()
-        evaluate.append(arr)
-
-    np.save(
-        args.save_path + "\evaluate{}.npy".format(args.top - 1), np.asarray(evaluate)
+    module = module_def.load_from_checkpoint(
+        checkpoint_path = args.weights,
+        data_path = args.data_path,
+        data_set = "deepfashion_val",
+        batch_size = 1,
+        backbone = args.backbone,
     )
-    similar_attr.close()
+    
+    OnlineTripletDataset.initialize(
+        img_size=224, datapath=args.data_path, imagenet_norm=True
+    )
 
+    query_dataloader = OnlineTripletDataset.build_dataloader(
+        benchmark="deepfashion_val", 
+        bsz = 1, 
+        nworker = 8, 
+        split = "val", 
+        val_type = "query"
+    )
 
-if __name__ == "__main__":
+    gallery_dataloader = OnlineTripletDataset.build_dataloader(
+        benchmark="deepfashion_val",
+        bsz = 1, 
+        nworker = 8, 
+        split = "val", 
+        val_type = "gallery"
+        )
+
+    gallery_vectors = []
+    gallery_classes = []
+    class_ids = {}
+    class_count = 0
+
+    # emb_model = get_embed_model(128, name=args.backbone)
+    # emb_model = emb_model.to("cuda")
+    # state_dict = torch.load(args.weights)["state_dict"]
+    
+    # new_state_dict = state_dict.copy()
+
+    # for old_key, value in state_dict.items():
+    #   new_state_dict[old_key.replace("net.", "")] = value
+    #   del new_state_dict[old_key]
+    # print(new_state_dict.keys())
+    # emb_model.load_state_dict(new_state_dict)
+    emb_model = module.net.eval().to("cuda")
+
+    print("Embedding dataset...")
+    for batch_idx, batch in tqdm(enumerate(gallery_dataloader), total=len(gallery_dataloader)):
+        imgs, pair_ids, styles = batch
+        imgs = torch.stack(imgs, 0).to("cuda")
+
+        feature_vector = emb_model(imgs)
+        gallery_vectors.append(feature_vector.to("cpu"))
+        # label
+        for i in range(len(pair_ids)):
+            label = f"{pair_ids[i]}_{styles[i]}"
+            if label not in class_ids:
+                class_ids[f"{pair_ids[i]}_{styles[i]}"] = class_count
+                class_count += 1
+            gallery_classes.append(class_ids[label])
+
+    gallery_vectors = torch.cat(gallery_vectors, 0)
+    
+    knn = NearestNeighbors(n_neighbors=20)
+    knn.fit(gallery_vectors)
+
+    class_ids = class_ids
+    gallery_classes = torch.Tensor(gallery_classes)
+
+    top_k = args.top
+    top_k_accuracy = TopKAccuracy()
+    mean_reciprocal_rank = MeanReciprocalRank()
+    print("Evaluation...")
+    with torch.no_grad():
+        for batch in tqdm(query_dataloader, total=len(query_dataloader)):
+            imgs, pair_ids, styles = batch
+            imgs = torch.stack(imgs, 0).to("cuda")
+            embeddings = emb_model(imgs)
+
+            # Convert label
+            labels = []
+            assert len(pair_ids) == len(styles)
+            for i in range(len(pair_ids)):
+                label = class_ids[f"{pair_ids[i]}_{styles[i]}"]
+                labels.append(label)
+
+            dists, indexes = knn.kneighbors(embeddings.to("cpu"), top_k)
+            top_k_classes = gallery_classes[indexes]
+            if len(top_k_classes.shape) == 1:
+                top_k_classes = torch.unsqueeze(top_k_classes, dim=0)
+            # calculate top k acc
+            top_k_accuracy.update(labels, top_k_classes)
+            #  mean reciprocal rank
+            mean_reciprocal_rank.update(labels, top_k_classes)
+
+    top_k_acc = top_k_accuracy.compute()
+    mrr = mean_reciprocal_rank.compute()
+    print(f"Top {top_k} accuracy: {top_k_acc}")
+    print(f"MRR {top_k}: {mrr}")
+
+if __name__=="__main__":
     main()
-
-
-def kNN_model(X, k):
-    """
-    Function to train an NearestNeighbors model, use to improve the speed of retrieving image from embedding database
-    Args:
-        X: data to train has shape MxN
-        k: number of max nearest neighbors want to search
-
-    Return:
-        Nearest Neigbors model
-    """
-    nn_model = NearestNeighbors(n_neighbors=k, n_jobs=-1)
-    nn_model.fit(X)
-    return nn_model
