@@ -84,3 +84,21 @@ __pycache__/
 
 # JetBrains
 .idea/
+
+# Data & Models
+*.h5
+*.tar
+*.tar.gz
+checkpoints/
+data/
+
+# Lightning-Hydra-Template
+configs/local/default.yaml
+logs/
+.env
+.autoenv
+./scripts/*.sh
+
+# Data directory
+deepfashion2
+demo/validation/
