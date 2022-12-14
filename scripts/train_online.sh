@@ -1,4 +1,3 @@
-#!/bin/bash
 python src/train_online.py \
 --exp-name train-online-batch-hard_resnet50-bsz4-lr1e4 --project_name visual-search \
 --backbone resnet50 \

@@ -14,6 +14,7 @@ import torchvision
 import torchvision.transforms as transform
 from sklearn.neighbors import NearestNeighbors
 from torch.autograd import Variable
+from tqdm import tqdm
 
 from src.datamodules.onlinetriplets import DeepFashionOnlineValidationDataset
 
@@ -24,7 +25,7 @@ parser = argparse.ArgumentParser()
 # Path to the dataframe contains image paths, labels,...
 parser.add_argument(
     "--df_path",
-    default="data\Shopping100k\Attributes\shopping100k.csv",
+    default="data\list_bbox_consumer2shop.txt",
     help="Dataframe contains the deep fashion dataset",
 )
 # Directory to the image dir
@@ -34,13 +35,13 @@ parser.add_argument(
 # Path to the embedding model state dict
 parser.add_argument(
     "--emb",
-    default="fashion-visual-search\src\pytorch\models\embedding_model\multinet_VGG16bn\multi_net_ckpt11.pt",
+    default="checkpoints\\resnet101\\top_k_acc=0.715.zip",
     help="Path to the embedding model state dict",
 )
 # Output path of enbedding
 parser.add_argument(
     "--save_dir",
-    default="data\model_inference\shopping100k\Multinet\ckpt11",
+    default="checkpoints\embeddings",
     help="Path to save file embedding",
 )
 
@@ -78,7 +79,7 @@ def main():
     )
     # eval_dataset = DeepFashionGallery(df, im_size=(224, 224), root_dir=args.img_dir, source_type=1)
     eval_dataset = DeepFashionOnlineValidationDataset(
-        datapath="", transforms=transforms, split="val", val_type="gallery"
+        datapath=".\data", transforms=transforms, split="val", val_type="gallery"
     )
     evalloader = torch.utils.data.DataLoader(
         eval_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4
@@ -86,7 +87,7 @@ def main():
 
     # query_dataset = DeepFashionGallery(df, im_size=(224, 224), root_dir=args.img_dir, source_type=2)
     query_dataset = DeepFashionOnlineValidationDataset(
-        datapath="", transforms=transforms, split="val", val_type="query"
+        datapath=".\data", transforms=transforms, split="val", val_type="query"
     )
     queryloader = torch.utils.data.DataLoader(
         query_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4
@@ -96,12 +97,12 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Create the embedding model and load checkpoint
-    emb_model = torchvision.models.resnet50(pretrained=True)
+    emb_model = torchvision.models.resnet101(pretrained=True)
     num_features = emb_model.fc.in_features
     emb_model.fc = nn.Linear(num_features, 128)
 
     emb_model = emb_model.to(device)
-    state_dict = torch.load(args.emb)["state_dict"]
+    state_dict = torch.load(args.emb, map_location=device)["state_dict"]
 
     new_state_dict = state_dict.copy()
 
@@ -125,7 +126,7 @@ def main():
     class_count = 0
 
     with torch.no_grad():
-        for batch_idx, (eval_image, pair_ids, styles) in enumerate(evalloader):
+        for batch_idx, (eval_image, pair_ids, styles) in tqdm(enumerate(evalloader), total=len(evalloader)):
             print(eval_image.shape)
             for i in range(len(pair_ids)):
                 label = f"{pair_ids[i]}_{styles[i]}"
@@ -134,8 +135,11 @@ def main():
                     class_ids[f"{pair_ids[i]}_{styles[i]}"] = class_count
                     class_count += 1
                 label_list.append(class_ids[label])
-
-            eval_image = Variable(eval_image).cuda()
+    
+            if torch.cuda.is_available():
+                eval_image = Variable(eval_image).cuda()
+            else:
+                eval_image = Variable(eval_image).cpu()
             emb = emb_model(eval_image)
             embedding = torch.cat((embedding, emb), 0)
 
@@ -149,14 +153,17 @@ def main():
         top_k_acc = [0 for i in range(31)]
         mrr = [0 for i in range(31)]
         total = 0
-        for batch_idx, (query_image, pair_ids, styles) in enumerate(queryloader):
+        for batch_idx, (query_image, pair_ids, styles) in tqdm(enumerate(queryloader), total=len(queryloader)):
             labels = []
             assert len(pair_ids) == len(styles)
             for i in range(len(pair_ids)):
                 label = class_ids[f"{pair_ids[i]}_{styles[i]}"]
                 labels.append(label)
 
-            query_image = Variable(query_image).cuda()
+            if torch.cuda.is_available():
+                eval_image = Variable(eval_image).cuda()
+            else:
+                eval_image = Variable(eval_image).cpu()
             emb = emb_model(query_image)
             dist, idx = nn_model.kneighbors(emb.cpu(), 30)
 

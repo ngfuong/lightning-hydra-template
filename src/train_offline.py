@@ -2,6 +2,7 @@ import glob
 import os
 from argparse import ArgumentParser
 
+import torch
 import pytorch_lightning as pl
 
 from src.models.vs_module import VisualSearchModule 
@@ -13,7 +14,10 @@ def do_training(hparams, model_constructor):
 
     # Set training params
     # hparams.gpus = -1
-    hparams.accelerator = "cuda"
+    if torch.cuda.is_available():
+        hparams.accelerator = "cuda"
+    else:
+        hparams.accelerator = "cpu"
     hparams.benchmark = True
 
     if hparams.resume:

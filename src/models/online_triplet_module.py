@@ -24,7 +24,7 @@ class VS_args:
     datapath = "data"
     benchmark = "deepfashion"
     logpath = "logs"
-    nworker = 32
+    nworker = 16
     bsz = 1024
 
 
@@ -358,7 +358,10 @@ class OnlineTripletModule(LightningModule):
             split="train",
         )
 
-        self.len_train_dataloader = len(dataloader) // torch.cuda.device_count()
+        if torch.cuda.is_available():
+            self.len_train_dataloader = len(dataloader) // torch.cuda.device_count()
+        else:
+            self.len_train_dataloader = len(dataloader)
         return dataloader
 
     def val_dataloader(self, val_type="query"):
@@ -370,7 +373,11 @@ class OnlineTripletModule(LightningModule):
             val_type
         )
 
-        self.len_val_dataloader = len(dataloader) // torch.cuda.device_count()
+        if torch.cuda.is_available():
+            self.len_val_dataloader = len(dataloader) // torch.cuda.device_count()
+        else:
+            self.len_val_dataloader = len(dataloader)
+
         return dataloader
 
     @staticmethod

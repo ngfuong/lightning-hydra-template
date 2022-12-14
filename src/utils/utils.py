@@ -9,3 +9,6 @@ def random_exclusion(start, stop, excluded) -> int:
             break
         value += 1
     return value
+
+def collate_fn(batch):
+    return tuple(zip(*batch))
