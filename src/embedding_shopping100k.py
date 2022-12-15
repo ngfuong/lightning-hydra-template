@@ -22,23 +22,25 @@ parser = argparse.ArgumentParser()
 # Path to the dataframe contains image paths, labels,...
 parser.add_argument(
     "--df_path",
-    default="data\Shopping100k\Attributes\shopping100k.csv",
+    default="data/shopping100k_similar.csv",
     help="Dataframe contains the deep fashion dataset",
 )
 # Directory to the image dir
 parser.add_argument(
-    "--img_dir", default="data\Shopping100k\Images", help="Root dir to the image dir"
+    "--img_dir", 
+    default="data/shopping100k/Images", 
+    help="Path to Shopping100k Images directory"
 )
 # Path to the embedding model state dict
 parser.add_argument(
     "--emb",
-    default="fashion-visual-search\src\pytorch\models\embedding_model\multinet_VGG16bn\multi_net_ckpt11.pt",
+    default="checkpoints/resnet101/top_k_acc=0.715.ckpt",
     help="Path to the embedding model state dict",
 )
 # Output path of enbedding
 parser.add_argument(
     "--save_dir",
-    default="data\model_inference\shopping100k\Multinet\ckpt11",
+    default="checkpoints/embeddings",
     help="Path to save file embedding",
 )
 

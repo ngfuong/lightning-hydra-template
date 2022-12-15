@@ -25,23 +25,19 @@ parser = argparse.ArgumentParser()
 # Path to the dataframe contains image paths, labels,...
 parser.add_argument(
     "--df_path",
-    default="data\list_bbox_consumer2shop.txt",
-    help="Dataframe contains the deep fashion dataset",
-)
-# Directory to the image dir
-parser.add_argument(
-    "--img_dir", default="data\Shopping100k\Images", help="Root dir to the image dir"
+    default="data/list_bbox_consumer2shop.txt",
+    help="Path to DeepFashion file.",
 )
 # Path to the embedding model state dict
 parser.add_argument(
     "--emb",
-    default="checkpoints\\resnet101\\top_k_acc=0.715.zip",
+    default="checkpoints/resnet101/top_k_acc=0.715.ckpt",
     help="Path to the embedding model state dict",
 )
 # Output path of enbedding
 parser.add_argument(
     "--save_dir",
-    default="checkpoints\embeddings",
+    default="checkpoints/embeddings",
     help="Path to save file embedding",
 )
 
@@ -79,7 +75,7 @@ def main():
     )
     # eval_dataset = DeepFashionGallery(df, im_size=(224, 224), root_dir=args.img_dir, source_type=1)
     eval_dataset = DeepFashionOnlineValidationDataset(
-        datapath=".\data", transforms=transforms, split="val", val_type="gallery"
+        datapath="./data", transforms=transforms, split="val", val_type="gallery"
     )
     evalloader = torch.utils.data.DataLoader(
         eval_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4
@@ -87,7 +83,7 @@ def main():
 
     # query_dataset = DeepFashionGallery(df, im_size=(224, 224), root_dir=args.img_dir, source_type=2)
     query_dataset = DeepFashionOnlineValidationDataset(
-        datapath=".\data", transforms=transforms, split="val", val_type="query"
+        datapath="./data", transforms=transforms, split="val", val_type="query"
     )
     queryloader = torch.utils.data.DataLoader(
         query_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4

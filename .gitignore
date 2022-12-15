@@ -24,8 +24,7 @@ vs/
 *.ckpt
 *.tar
 *.tar.gz
-checkpoints/
-data/
+data/*/
 logs/
 
 # Distribution / packaging
@@ -89,8 +88,8 @@ __pycache__/
 *.h5
 *.tar
 *.tar.gz
-checkpoints/
-data/
+checkpoints/train*
+checkpoints/wandb/
 
 # Lightning-Hydra-Template
 configs/local/default.yaml

@@ -31,14 +31,14 @@ def kNN_model(X, k):
 parser = argparse.ArgumentParser()
 # Path to the dataframe contains image paths, labels,...
 parser.add_argument(
-    "--save_path",
-    default="data\\model_inference\\shopping100k\\resnet50_1000\\ckpt5",
+    "--attr_path",
+    default="data/shopping100k_similar.csv",
     help="path to the save file",
 )
 # Path to the data embeddings
 parser.add_argument(
     "--emb_path",
-    default="data\\model_inference\\shopping100k\\resnet50_1000\\ckpt5\\data_embeddings_ckpt5.npy",
+    default="checkpoints/embeddings/data_embeddings.npy",
     help="Path to the embedding dataset",
 )
 # Top K nearest embedding (+1 for the query image)
@@ -47,6 +47,11 @@ parser.add_argument(
     default=31,
     type=int,
     help="Top K nearest embedding (+1 for the query image)",
+)
+parser.add_argument(
+    "--save_path",
+    default="checkpoints/embeddings",
+    help="path to output evaluate file",
 )
 
 
@@ -62,9 +67,7 @@ def main():
     5. Save the evaluate
     """
     # similar_attr = open('data\Shopping100k\shorter_sim_attr.txt', 'r')
-    similar_attr = pd.read_csv(
-        "~locnt/code/lightning-hydra-template/data/shopping100k_similar.csv"
-    )
+    similar_attr = pd.read_csv(args.attr_path)
 
     emb_data = np.load(args.emb_path)
     print(emb_data.shape)

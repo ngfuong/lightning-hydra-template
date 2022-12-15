@@ -139,7 +139,7 @@ class Predictor:
 
         self.transforms = get_transform_embed((224, 224))
 
-        self.emb_data = np.load("data_embedding.npy")
+        self.emb_data = np.load("checkpoints/embeddings/data_embeddings.npy")
         print(self.emb_data.shape)
 
         # Device configuration
@@ -151,7 +151,7 @@ class Predictor:
         # Turn model to evaluation mode
         self.emb_model = get_embed_model(128)
         self.emb_model = self.emb_model.to(self.device)
-        state_dict = torch.load("checkpoints/checkpoint.ckpt")["state_dict"]
+        state_dict = torch.load("checkpoints/resnet101/top_k_acc=0.715.ckpt")["state_dict"]
 
         new_state_dict = state_dict.copy()
 
