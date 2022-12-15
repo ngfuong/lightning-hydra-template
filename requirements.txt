@@ -4,11 +4,19 @@ pandas
 online_triplet_loss # Loss for online triplet training
 scikit-learn # Evaluation
 
+# ----- cuda version -------- #
+# nvidia-cublas-cu11==11.10.3.66
+# nvidia-cuda-nvrtc-cu11==11.7.99
+# nvidia-cuda-runtime-cu11==11.7.99
+# nvidia-cudnn-cu11==8.5.0.96
+# nvidia-ml-py==11.495.46
+
 # --------- pytorch --------- #
-torch>=1.10.0
-torchvision>=0.11.0
-pytorch-lightning==1.7.1
+torch==1.11.0+cu113
+torchaudio==0.11.0+cu113
 torchmetrics==0.9.3
+torchsummary==1.5.1
+torchvision==0.12.0+cu113
 
 # --------- hydra --------- #
 # hydra-core==1.2.0
